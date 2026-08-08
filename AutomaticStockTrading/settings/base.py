@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     # Local apps
     "User",
     "marketdata",
+    "strategies",
 ]
 
 MIDDLEWARE = [

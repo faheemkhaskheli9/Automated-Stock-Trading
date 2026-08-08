@@ -9,9 +9,9 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
 
 - **Phase 0 (done)**: project hygiene - settings split, env config, requirements, CI, linting.
 - **Phase 1 (done)**: `marketdata` app - PSX data pipeline (see below).
-- **Phase 2+ (not yet built)**: pluggable strategy framework + backtesting,
-  orders/portfolio/risk + paper broker, API/dashboard, containerized deploy, live trading
-  (gated on a real PSX broker/vendor relationship - see below).
+- **Phase 2 (done)**: `strategies` app - pluggable strategy framework + backtesting (see below).
+- **Phase 3+ (not yet built)**: orders/portfolio/risk + paper broker, API/dashboard,
+  containerized deploy, live trading (gated on a real PSX broker/vendor relationship).
 
 Key direction decisions (see `docs/PLAN.md` for the full rationale):
 - Market: PSX. No official free market-data API exists - the plan uses the `psxdata` scraper
@@ -85,8 +85,38 @@ activate the venv first):
   - `tasks.py`: `sync_all_active_instruments` Celery task - not yet wired to a beat schedule;
     add a `PeriodicTask` (django-celery-beat, via admin) for after PSX market close when this
     runs somewhere Celery is actually deployed.
-- Future apps (per the plan, not yet created): `strategies` (+ `backtesting`),
-  `execution`/`orders`, `portfolio`, `risk`.
+- `strategies/` - pluggable signal generation.
+  - `signals.py`: `Action` enum (buy/sell/hold) + `Signal` dataclass - the one shape every
+    strategy produces.
+  - `base.py`: `BaseStrategy` ABC - `generate_signals(bars: list[Bar]) -> list[Signal]`, one
+    signal per bar (vectorized-per-history), so the same call replays in a backtest or (in
+    Phase 3) just has its last element taken for a live decision.
+  - `registry.py`: `@register_strategy("key")` + `get_strategy_class(key)`. The `Strategy`
+    model stores this string key (not a Python import path) so admin-configured strategies
+    can't reference arbitrary code.
+  - `rules.py`: `MovingAverageCrossoverStrategy`, `RSIStrategy` - reference rule-based
+    strategies, pandas-vectorized.
+  - `manual.py`: `ManualSignalStrategy` - reads operator-entered `ManualSignal` rows for its
+    configured `instrument_id`, same interface as any computed strategy.
+  - `ml.py`: `MLModelStrategy` - wired to load a joblib-dumped model via `model_path` and
+    call `.predict()`; **no training/feature pipeline exists yet** (not enough PriceBar
+    history accumulated) - it degrades to HOLD until a real model is dropped in. Don't
+    assume this produces meaningful signals.
+  - `models.py`: `Strategy` (configured instance: name/key/params JSON/instruments
+    M2M/is_active - `key` validity checked in `clean()`, not via field `choices`, to avoid a
+    circular import with `manual.py`; see `apps.py`), `ManualSignal` (per-instrument/day
+    operator entry).
+  - `apps.py`: `ready()` imports `rules`/`manual`/`ml` so their `@register_strategy`
+    decorators fire - the registry is only reliably populated after Django app startup, not
+    at `models.py` import time.
+  - `backtesting/engine.py`: `run_backtest(strategy, bars, initial_cash)` - long-only,
+    single-instrument, all-in/all-out replay; returns `BacktestResult` with `cagr`,
+    `max_drawdown`, `win_rate`, `sharpe`, `trades`, `equity_curve`. Position sizing/risk
+    limits are deliberately NOT applied here - that's the `risk` app's job in Phase 3, against
+    live trading, not this historical replay.
+  - `management/commands/run_backtest.py`: `python manage.py run_backtest SYMBOL
+    STRATEGY_KEY [--params '{"fast_period": 10}'] [--start] [--end] [--cash]`.
+- Future apps (per the plan, not yet created): `execution`/`orders`, `portfolio`, `risk`.
 
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.
