@@ -29,6 +29,15 @@ class Strategy(models.Model):
         help_text="Keyword args passed to the strategy class, e.g. {'fast_period': 10}.",
     )
     instruments = models.ManyToManyField(Instrument, related_name="strategies", blank=True)
+    account = models.ForeignKey(
+        "portfolio.Account",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="strategies",
+        help_text="Account this strategy trades on when active. Required for run_trading_cycle "
+        "to submit orders for it - a Strategy without one is never executed live.",
+    )
     is_active = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -10,8 +10,10 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
 - **Phase 0 (done)**: project hygiene - settings split, env config, requirements, CI, linting.
 - **Phase 1 (done)**: `marketdata` app - PSX data pipeline (see below).
 - **Phase 2 (done)**: `strategies` app - pluggable strategy framework + backtesting (see below).
-- **Phase 3+ (not yet built)**: orders/portfolio/risk + paper broker, API/dashboard,
-  containerized deploy, live trading (gated on a real PSX broker/vendor relationship).
+- **Phase 3 (done)**: `portfolio`/`risk`/`execution` apps - paper broker + live trading cycle
+  (see below).
+- **Phase 4+ (not yet built)**: DRF API/dashboard + alerting, containerized deploy, live
+  trading (gated on a real PSX broker/vendor relationship).
 
 Key direction decisions (see `docs/PLAN.md` for the full rationale):
 - Market: PSX. No official free market-data API exists - the plan uses the `psxdata` scraper
@@ -116,7 +118,44 @@ activate the venv first):
     live trading, not this historical replay.
   - `management/commands/run_backtest.py`: `python manage.py run_backtest SYMBOL
     STRATEGY_KEY [--params '{"fast_period": 10}'] [--start] [--end] [--cash]`.
-- Future apps (per the plan, not yet created): `execution`/`orders`, `portfolio`, `risk`.
+- `portfolio/` - `Account` (paper/live, cash_balance, `.equity` property = cash + mark-to-market
+  positions) and `Position` (per account+instrument, unique together). `Account.broker` selects
+  the `BrokerAdapter` (see `execution/brokers`) - only `"paper"` exists today.
+- `risk/` - pre-trade checks, run before every order.
+  - `checks.py`: `check_max_daily_loss` (against a `DailyEquitySnapshot` lazily captured the
+    first time it's checked each day - not a separate scheduled job), `check_max_position_size`
+    (SELL always passes - it only reduces exposure; existing position value counts toward the
+    limit for BUY).
+  - `engine.py`: `evaluate(account, instrument, side, quantity, price, strategy=None)` - reads
+    thresholds from the account owner's `User.UserProfile` (falls back to that model's own
+    defaults if no profile exists), runs both checks, and unconditionally writes a
+    `RiskDecision` audit row (approved or not) before returning.
+  - This app does NOT know about `execution.Order` - the duplicate-order guard lives in
+    `execution/services.py` instead, specifically to avoid a risk<->execution circular import.
+- `execution/` - orders and the trading cycle.
+  - `models.py`: `Order` (full pending/submitted/filled/rejected/cancelled lifecycle, though
+    `PaperBroker` resolves it synchronously in one call), `Trade` (a fill, separate from
+    `Order` so partial fills from a future real broker aren't a schema change).
+  - `brokers/base.py`: `BrokerAdapter` interface (`submit_order`, `cancel_order`,
+    `get_positions`, `get_account`). `brokers/paper.py`: `PaperBroker`, the only
+    implementation - fills against the latest stored `PriceBar` (not a live network call),
+    updates `Position`/`Account` atomically, rejects on no price data / insufficient
+    funds/position. `brokers/__init__.get_broker(account)` dispatches on `Account.broker`.
+  - `services.place_order(account, instrument, side, quantity, strategy=None)` - the only path
+    to create an Order: duplicate-order guard (same account+instrument+side within 5 minutes)
+    -> `risk.engine.evaluate` -> `get_broker(account).submit_order`. Always call this, never
+    construct `Order` + a broker directly.
+  - `tasks.run_trading_cycle` - Celery task: for each active `Strategy` with an `account` set,
+    builds it, generates a signal per configured instrument from stored `PriceBar` history, and
+    calls `place_order` for the last non-HOLD signal. Order sizing is a fixed lot
+    (`Strategy.params["order_quantity"]`, default 100) for BUY and "sell the whole position"
+    for SELL - real position sizing is out of scope for v1; `risk.engine`'s max-position-size
+    check is what actually bounds exposure. One strategy/instrument raising doesn't abort the
+    rest of the cycle. Not yet wired to a beat schedule - same caveat as
+    `marketdata.tasks.sync_all_active_instruments`.
+  - `Strategy.account` (added in `strategies/migrations/0002_strategy_account.py`) is what
+    `run_trading_cycle` uses to pick an account per strategy - a `Strategy` without one is
+    never executed live, only backtested.
 
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.

@@ -40,6 +40,9 @@ INSTALLED_APPS = [
     "User",
     "marketdata",
     "strategies",
+    "portfolio",
+    "risk",
+    "execution",
 ]
 
 MIDDLEWARE = [
