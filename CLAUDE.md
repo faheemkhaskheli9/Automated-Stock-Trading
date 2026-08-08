@@ -8,9 +8,10 @@ Automated Stock Trading system targeting the Pakistan Stock Exchange (PSX). Bein
 phases per `docs/PLAN.md` (the full approved plan, with rationale):
 
 - **Phase 0 (done)**: project hygiene - settings split, env config, requirements, CI, linting.
-- **Phase 1+ (not yet built)**: market data pipeline, pluggable strategy framework +
-  backtesting, orders/portfolio/risk + paper broker, API/dashboard, containerized deploy,
-  live trading (gated on a real PSX broker/vendor relationship - see below).
+- **Phase 1 (done)**: `marketdata` app - PSX data pipeline (see below).
+- **Phase 2+ (not yet built)**: pluggable strategy framework + backtesting,
+  orders/portfolio/risk + paper broker, API/dashboard, containerized deploy, live trading
+  (gated on a real PSX broker/vendor relationship - see below).
 
 Key direction decisions (see `docs/PLAN.md` for the full rationale):
 - Market: PSX. No official free market-data API exists - the plan uses the `psxdata` scraper
@@ -66,7 +67,25 @@ activate the venv first):
   (`risk_tolerance`, `max_daily_loss_pct`, `max_position_size_pct`). Broker credentials are
   deliberately NOT here yet - they land once Phase 3's `BrokerAdapter` interface exists, and
   will be encrypted at rest rather than plain fields.
-- Future apps (per the plan, not yet created): `marketdata`, `strategies` (+ `backtesting`),
+- `marketdata/` - PSX price data.
+  - `models.py`: `Instrument` (symbol/exchange/sector), `PriceBar` (OHLCV, unique per
+    instrument+timeframe+timestamp).
+  - `providers/base.py`: `MarketDataProvider` interface (`get_history`, `get_latest`) +
+    provider-agnostic `Bar`/`Quote` dataclasses - nothing outside `providers/psx.py` imports
+    `psxdata` directly, so swapping data sources later doesn't touch callers.
+  - `providers/psx.py`: `PSXProvider`, the only concrete implementation, wraps
+    `psxdata.PSXClient`. Catches `psxdata.exceptions.PSXDataError` (the common base for all
+    psxdata failures) and returns empty/`None` rather than raising, so one bad symbol/network
+    blip doesn't blow up a batch sync.
+  - `services.py`: `sync_instrument_history` / `sync_active_instruments` - upserts via
+    `bulk_create(update_conflicts=True)`; used by both the management command and the Celery
+    task so they share one code path.
+  - `management/commands/sync_market_data.py`: `python manage.py sync_market_data [--symbol X]
+    [--start YYYY-MM-DD] [--end YYYY-MM-DD]`.
+  - `tasks.py`: `sync_all_active_instruments` Celery task - not yet wired to a beat schedule;
+    add a `PeriodicTask` (django-celery-beat, via admin) for after PSX market close when this
+    runs somewhere Celery is actually deployed.
+- Future apps (per the plan, not yet created): `strategies` (+ `backtesting`),
   `execution`/`orders`, `portfolio`, `risk`.
 
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
