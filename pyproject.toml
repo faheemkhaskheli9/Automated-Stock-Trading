@@ -1,0 +1,23 @@
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+known_first_party = ["AutomaticStockTrading", "User"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = ["migrations"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# dev.py/prod.py intentionally do `from .base import *` to layer env-specific
+# overrides on shared settings - star import and its "undefined" names are expected.
+"AutomaticStockTrading/settings/dev.py" = ["F403", "F405"]
+"AutomaticStockTrading/settings/prod.py" = ["F403", "F405"]

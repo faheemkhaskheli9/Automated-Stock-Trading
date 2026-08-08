@@ -1,0 +1,18 @@
+# Core
+Django>=6.0,<6.1
+django-environ>=0.11,<1.0
+psycopg[binary]>=3.2,<4.0
+
+# API
+djangorestframework>=3.15,<4.0
+
+# Background jobs / scheduling
+celery>=5.4,<6.0
+redis>=5.0,<6.0
+django-celery-beat>=2.7,<3.0
+
+# Market data / analysis
+pandas>=2.2,<3.0
+# psxdata has no stable release yet (alpha only) - pin exact version and allow
+# pre-releases explicitly rather than floating on an unstable range.
+psxdata==0.1.0a5

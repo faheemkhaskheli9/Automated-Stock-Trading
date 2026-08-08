@@ -1,0 +1,12 @@
+-r requirements.txt
+
+# Testing
+pytest>=8.3,<9.0
+pytest-django>=4.9,<5.0
+factory-boy>=3.3,<4.0
+
+# Lint / format
+black>=24.10
+ruff>=0.7
+isort>=5.13
+pre-commit>=4.0
