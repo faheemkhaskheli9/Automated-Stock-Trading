@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "portfolio",
     "risk",
     "execution",
+    "api",
 ]
 
 MIDDLEWARE = [
@@ -150,3 +151,17 @@ CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL)
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TASK_TRACK_STARTED = True
+
+
+# Alerting (execution/notifications.py) - order fills, rejections, and
+# risk-limit breaches. Both channels are optional; with neither configured,
+# alerts are just logged (see notifications.send_alert).
+
+ADMIN_EMAILS = env.list("ADMIN_EMAILS", default=[])
+ADMINS = [(f"Admin {i + 1}", email) for i, email in enumerate(ADMIN_EMAILS)]
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="alerts@automatic-stock-trading.local")
+
+# Webhook (e.g. a Slack/Telegram incoming-webhook URL) receiving
+# {"text": "..."} POSTs - swap ALERT_WEBHOOK_URL for whichever service without
+# touching notifications.py.
+ALERT_WEBHOOK_URL = env("ALERT_WEBHOOK_URL", default="")

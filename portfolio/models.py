@@ -39,6 +39,7 @@ class Account(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["owner", "name"], name="unique_account_name_per_owner")
         ]
+        ordering = ["id"]
 
     def __str__(self):
         return f"{self.name} ({self.get_account_type_display()})"
@@ -67,6 +68,7 @@ class Position(models.Model):
                 fields=["account", "instrument"], name="unique_position_per_account_instrument"
             )
         ]
+        ordering = ["id"]
 
     def __str__(self):
         return f"{self.account}: {self.quantity} {self.instrument.symbol} @ {self.avg_entry_price}"

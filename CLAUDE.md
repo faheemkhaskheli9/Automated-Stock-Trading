@@ -12,8 +12,10 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
 - **Phase 2 (done)**: `strategies` app - pluggable strategy framework + backtesting (see below).
 - **Phase 3 (done)**: `portfolio`/`risk`/`execution` apps - paper broker + live trading cycle
   (see below).
-- **Phase 4+ (not yet built)**: DRF API/dashboard + alerting, containerized deploy, live
-  trading (gated on a real PSX broker/vendor relationship).
+- **Phase 4 (done)**: `api` app (DRF) + alerting (see below). Dashboard is Django admin, per
+  the plan - no separate frontend was built.
+- **Phase 5+ (not yet built)**: containerized deploy, live trading (gated on a real PSX
+  broker/vendor relationship).
 
 Key direction decisions (see `docs/PLAN.md` for the full rationale):
 - Market: PSX. No official free market-data API exists - the plan uses the `psxdata` scraper
@@ -156,6 +158,20 @@ activate the venv first):
   - `Strategy.account` (added in `strategies/migrations/0002_strategy_account.py`) is what
     `run_trading_cycle` uses to pick an account per strategy - a `Strategy` without one is
     never executed live, only backtested.
+  - `notifications.send_alert(subject, message)` - fills/rejections call this (see
+    `services._notify`). Emails `settings.ADMINS` (set via `ADMIN_EMAILS` env, comma-separated)
+    and/or POSTs `{"text": ...}` to `settings.ALERT_WEBHOOK_URL` (a Slack/Telegram incoming
+    webhook) if configured; with neither set, it only logs. Every failure inside is caught -
+    an alerting problem must never break order placement.
+- `api/` - DRF read API + the strategy on/off toggle. Routed at `/api/` (see
+  `AutomaticStockTrading/urls.py`); `/api-auth/` adds session login for the browsable API in
+  dev. All endpoints require authentication (`IsAuthenticated`); every viewset except
+  `InstrumentViewSet`/`PriceBarViewSet` (reference data) uses `OwnerScopedMixin` to filter to
+  the requesting user's own `Account`(s) via `owner_lookup` - staff users see everything.
+  `StrategyViewSet` is the only writable one, and only `is_active` is writable (GET/PATCH
+  only - no create/delete). `PositionSerializer` computes `market_value`/`unrealized_pnl` on
+  the fly (not stored). There's no separate frontend - Django admin is the operational
+  dashboard, per `docs/PLAN.md`.
 
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.

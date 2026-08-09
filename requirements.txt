@@ -14,6 +14,9 @@ django-celery-beat>=2.7,<3.0
 # Market data / analysis / ML strategy model loading
 pandas>=2.2,<3.0
 joblib>=1.4,<2.0
+
+# Alerting (webhook delivery)
+requests>=2.32,<3.0
 # psxdata has no stable release yet (alpha only) - pin exact version and allow
 # pre-releases explicitly rather than floating on an unstable range.
 psxdata==0.1.0a5

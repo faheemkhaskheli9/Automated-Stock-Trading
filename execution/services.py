@@ -15,6 +15,7 @@ from strategies.signals import Action
 
 from .brokers import get_broker
 from .models import Order
+from .notifications import send_alert
 
 # How recently an identical (account, instrument, side) order must have
 # been placed to be treated as a likely duplicate (e.g. a stuck scheduler
@@ -28,6 +29,18 @@ def place_order(
     side: Action,
     quantity: int,
     strategy: Strategy | None = None,
+) -> Order:
+    order = _place_order(account, instrument, side, quantity, strategy)
+    _notify(order)
+    return order
+
+
+def _place_order(
+    account: Account,
+    instrument: Instrument,
+    side: Action,
+    quantity: int,
+    strategy: Strategy | None,
 ) -> Order:
     if side == Action.HOLD:
         raise ValueError("Cannot place an order for a HOLD action")
@@ -60,6 +73,20 @@ def place_order(
         return _reject(order, result.reason)
 
     return get_broker(account).submit_order(order)
+
+
+def _notify(order: Order) -> None:
+    label = f"{order.side} {order.quantity} {order.instrument.symbol} ({order.account})"
+    if order.status == Order.Status.FILLED:
+        send_alert(
+            f"Order filled: {order.instrument.symbol}",
+            f"{label} filled at {order.filled_price}.",
+        )
+    elif order.status == Order.Status.REJECTED:
+        send_alert(
+            f"Order rejected: {order.instrument.symbol}",
+            f"{label} rejected: {order.rejection_reason}",
+        )
 
 
 def _is_duplicate(account: Account, instrument: Instrument, side: Action) -> bool:

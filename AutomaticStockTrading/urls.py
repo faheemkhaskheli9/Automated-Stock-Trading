@@ -16,8 +16,12 @@ Including another URLconf
 """
 
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path("api/", include("api.urls")),
+    # Session login/logout for the browsable API - convenient in dev; the
+    # deployed dashboard is Django admin (see docs/PLAN.md, Phase 4).
+    path("api-auth/", include("rest_framework.urls")),
 ]
