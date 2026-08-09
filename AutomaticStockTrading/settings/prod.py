@@ -25,6 +25,19 @@ SECURE_HSTS_INCLUDE_SUBDOMAINS = True
 SECURE_HSTS_PRELOAD = True
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+# Serves collected static files (admin/DRF browsable-API css/js) straight from the container -
+# no separate static host needed. Only added in prod: dev's runserver already serves static
+# files itself (via django.contrib.staticfiles) without a `collectstatic` step first, and
+# WhiteNoise warns loudly if STATIC_ROOT doesn't exist yet, which it never does in dev/tests.
+MIDDLEWARE = MIDDLEWARE[:1] + ["whitenoise.middleware.WhiteNoiseMiddleware"] + MIDDLEWARE[1:]
+
+# Compressed + hashed filenames for cache-busting - requires `collectstatic` at build/deploy
+# time (the Dockerfile does this).
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+
 # Real email delivery for alerts (see notifications.py) - defaults to SMTP;
 # override EMAIL_BACKEND via env if using a provider's API-based backend instead.
 EMAIL_BACKEND = env("EMAIL_BACKEND", default="django.core.mail.backends.smtp.EmailBackend")

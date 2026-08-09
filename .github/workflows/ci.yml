@@ -33,3 +33,17 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: python manage.py migrate
       - run: pytest
+
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      # Builds only - doesn't push. No registry/credentials are configured yet;
+      # wiring this to a registry + a cloud deploy is Phase 5's remaining
+      # open choice (see docs/PLAN.md). This still catches a broken
+      # Dockerfile/build on every push/PR.
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false

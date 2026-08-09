@@ -14,8 +14,11 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
   (see below).
 - **Phase 4 (done)**: `api` app (DRF) + alerting (see below). Dashboard is Django admin, per
   the plan - no separate frontend was built.
-- **Phase 5+ (not yet built)**: containerized deploy, live trading (gated on a real PSX
-  broker/vendor relationship).
+- **Phase 5 (done)**: `Dockerfile` + `docker-compose.yml` + `docs/DEPLOYMENT.md` (see below).
+  Docker itself was never available to actually build/run in the environment this was built
+  in - review before relying on it.
+- **Phase 6 (not started)**: live trading, gated on an actual PSX broker/vendor relationship
+  (see docs/PLAN.md) - not just code.
 
 Key direction decisions (see `docs/PLAN.md` for the full rationale):
 - Market: PSX. No official free market-data API exists - the plan uses the `psxdata` scraper
@@ -175,3 +178,14 @@ activate the venv first):
 
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.
+
+## Deployment
+
+See `docs/DEPLOYMENT.md` for the full picture (two scheduling shapes, open cloud-provider
+choice, secrets handling). Short version: `Dockerfile` is a multi-stage build ending in
+`gunicorn`; `docker-compose.yml` mirrors the full stack locally (web/worker/beat/postgres/
+redis). Both scheduled jobs (`sync_market_data`, `run_trading_cycle`) are also plain
+management commands that run the same code with no Celery broker/worker involved -
+`python manage.py run_trading_cycle` - meant to be invoked directly by a cloud managed
+scheduler (EventBridge/Cloud Scheduler) as a one-off container task, which is the
+plan's preferred shape over running a persistent Celery beat process.

@@ -20,3 +20,7 @@ requests>=2.32,<3.0
 # psxdata has no stable release yet (alpha only) - pin exact version and allow
 # pre-releases explicitly rather than floating on an unstable range.
 psxdata==0.1.0a5
+
+# Production web server / static files (see Dockerfile, settings/prod.py)
+gunicorn>=23.0,<24.0
+whitenoise>=6.7,<7.0
