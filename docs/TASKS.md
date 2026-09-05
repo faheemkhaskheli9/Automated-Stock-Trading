@@ -6,6 +6,18 @@ change.
 
 Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked · ⏭️ Deferred
 
+## Current status (2026-09-05)
+
+- Phase A is complete. Phase B foundation (B1–B5) is committed as `40b4265`.
+- Latest validation: **144 tests passed**, including 32 forecasting tests;
+  Django system/migration checks and Black/isort/Ruff checks passed locally.
+  Remote CI has not been verified.
+- **Next task: B7 — Ridge and ElasticNet predictors**, fitted only on supplied
+  training history, with baseline comparisons and predictor round-trip tests.
+- B6 is complete. B16 covers baselines and statistical predictors. Persistence, prediction
+  commands, walk-forward evaluation and the web dashboard remain pending.
+- Usage and timing limitations: [FORECASTING.md](FORECASTING.md).
+
 ---
 
 ## Phase A — `research` app (feature / signal library) — ✅ complete (2026-09-05)
@@ -30,7 +42,7 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | A14 | `research` admin registrations | ✅ | `research/admin.py` — all 4 models |
 | A15 | `requirements.txt`: add `feedparser`, `vaderSentiment` | ✅ | soft-imported; suite runs without them |
 
-## Phase B — `forecasting` app (predictor framework)
+## Phase B — `forecasting` app (predictor framework) — 🟡 in progress
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
@@ -39,7 +51,7 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | B3 | `registry.py`: `@register_predictor` / `get_predictor_class` / `registered_keys` | ✅ | Explicit registry with duplicate-key validation and informative lookup errors |
 | B4 | `features.py`: `assemble_training_frame()` — lag/return features + `research` bundle as-of each bar; target = next close | ✅ | Completed-day availability; aligned next-observed labels; cutoff feature hashes; no future labels in inputs |
 | B5 | `naive.py`: `NaiveClosePredictor`, `DriftPredictor` (baselines) | ✅ | `naive` / `drift`; drift rejects inference before fitted labels are available |
-| B6 | `stats.py`: `SarimaPredictor`, `EtsPredictor` (`statsmodels`), refit per fold | ⬜ | |
+| B6 | `stats.py`: `SarimaPredictor`, `EtsPredictor` (`statsmodels`), refit per fold | ✅ | Training-only fits, prefix replay and cutoff guards; 11 new tests; fold orchestration remains C1 |
 | B7 | `linear.py`: `RidgePredictor` / `ElasticNetPredictor`, sklearn `Pipeline`, scaler fit inside `fit()` | ⬜ | |
 | B8 | `trees.py`: `GradientBoostingPredictor` (`HistGradientBoostingRegressor`) | ⬜ | |
 | B9 | `deep.py`: `LstmPredictor` (PyTorch), guarded soft import, registration skipped if extra absent | ⬜ | `requirements-ml.txt` |
@@ -49,7 +61,7 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | B13 | `management/commands/predict_price.py` (`SYMBOL MODEL_KEY --as-of --params`) | ⬜ | |
 | B14 | `management/commands/train_predictor.py` (`MODEL_ID --start --end`) → `artifact_path` | ⬜ | |
 | B15 | `forecasting.tasks.run_daily_predictions` Celery task (unscheduled) | ⬜ | |
-| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | ⬜ | Baseline coverage done (21 forecasting tests); remaining predictors pending |
+| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | 🟡 | Baseline and statistical coverage done (32 forecasting tests); ML predictor coverage pending |
 | B17 | `forecasting` admin registrations | ⬜ | |
 
 ## Phase C — leakage-safe walk-forward backtesting
@@ -89,11 +101,11 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | E1 | DRF read viewsets: `Prediction`, `BacktestRun`, `ResearchSnapshot`, `NewsItem`; `PredictionModel` (`is_active`-only writable) | ⬜ | |
 | E2 | `requirements.txt`: `scikit-learn`, `statsmodels`, `pandas-ta`, `vaderSentiment`, `feedparser`, `django-htmx`, `plotly` | ⬜ | |
 | E3 | `requirements-ml.txt`: `torch` (+ `docs/DEPLOYMENT.md` note) | ⬜ | |
-| E4 | Update `docs/PLAN.md` — add Phase 7 summary | ⬜ | |
-| E5 | Update `CLAUDE.md` — per-app breakdown for `research` / `forecasting` / `dashboard` | ⬜ | |
+| E4 | Update `docs/PLAN.md` — add Phase 7 summary | ✅ | Phase 7 summary already present |
+| E5 | Update `CLAUDE.md` — per-app breakdown for `research` / `forecasting` / `dashboard` | 🟡 | Forecasting foundation documented in `40b4265`; complete app breakdowns as remaining phases land |
 | E6 | Update `docs/DEPLOYMENT.md` — new deps, model-artifact storage, `sync_research` + `run_daily_predictions` schedules | ⬜ | |
 | E7 | Update auto-memory `project-direction` note | ⬜ | |
-| E8 | Full green: `manage.py check`, `pytest`, `black`/`isort`/`ruff`, CI | ⬜ | |
+| E8 | Full green: `manage.py check`, `pytest`, `black`/`isort`/`ruff`, CI | 🟡 | B1–B6 local checks passed; 144 tests green; remote CI and final-phase verification pending |
 
 ---
 
@@ -110,3 +122,10 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
   Date-only fundamentals now wait until the following day. 21 new tests; full
   suite 133 passing; Django checks and migration checks clean. See
   `docs/FORECASTING.md` for usage, timing assumptions and remaining limitations.
+
+- 2026-09-05 — Recorded foundation commit `40b4265`, reconciled partial
+  testing/documentation statuses, and identified B6 as the next task.
+
+- 2026-09-05 - B6 complete: SARIMA/ETS predictors, statsmodels dependency, replay and leakage-boundary tests. Next: B7 (Ridge/ElasticNet).
+
+Validation: 144 tests passing; Django check, black, isort and ruff clean.

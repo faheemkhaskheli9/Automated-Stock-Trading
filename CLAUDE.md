@@ -179,7 +179,7 @@ activate the venv first):
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.
 
-## Forecasting foundation (Phase 7, B1-B5 complete)
+## Forecasting foundation (Phase 7, B1-B6 complete)
 
 `research` supplies technical/news/fundamental/social features. The new
 `forecasting` app registers `naive` and `drift` predictors through
@@ -194,7 +194,8 @@ training label was available. No forecast persistence, fitted artifacts,
 training command or walk-forward evaluation is implemented yet.
 
 Usage and limitations: `docs/FORECASTING.md`. Keep `docs/TASKS.md` updated;
-B6 (statistical predictors) is next. Full suite: 133 tests passing after B1-B5.
+B6 adds `sarima`/`ets` statistical predictors with training-only parameter fits and prefix replay.
+B7 (Ridge/ElasticNet) is next. See `docs/FORECASTING.md` for replay requirements.
 
 ## Deployment
 

@@ -1,6 +1,6 @@
 # Forecasting foundation
 
-Phase B tasks B1–B5 are implemented. The Django `forecasting` app registers
+Phase B tasks B1–B6 are implemented. The Django `forecasting` app registers
 `naive` (last observed close) and `drift` (mean training-period one-step
 price change). Both return `PricePrediction` objects with a target date,
 feature hash and model key. Neither creates orders or writes predictions.
@@ -72,7 +72,36 @@ The hashes identify assembled feature values, not full dataset versions.
 
 ## Next tasks
 
-Continue B6–B9 with statistical/ML predictors, then B10–B17 with configured
+Continue B7–B9 with statistical/ML predictors, then B10–B17 with configured
 models, forecast persistence, commands and daily tasks. B16 already has
 baseline coverage; the remaining predictors still need round-trip tests.
 Phase C adds walk-forward validation. See [TASKS.md](TASKS.md).
+
+## Statistical predictors (B6)
+
+Use `get_predictor_class("sarima")()` or `get_predictor_class("ets")()` with
+`fit(train)` and `predict_series(frame)` / `predict_next(...)`. Install the
+updated requirements first. SARIMA defaults to order `(1, 1, 0)` with no
+seasonality; configure `order`, `seasonal_order`, and `trend`. ETS defaults
+to additive error with no trend or seasonality; configure `error`, `trend`,
+`damped_trend`, `seasonal`, and `seasonal_periods`. Seasonal periods count
+observed sessions, not calendar days. Insufficient data, invalid model
+specifications, and failed convergence raise errors without a fallback.
+
+Training requires at least three contiguous labelled rows and includes the
+final known target close once. Each fit creates a new statsmodels model.
+Replay must start exactly at `predictor.fitted_through` (the final training
+label availability timestamp), with that same observed close, and supply
+every subsequent observed session in order. For a standalone forecast,
+fit through its decision timestamp first. This strict boundary avoids
+silently skipping observations or counting the final training close twice.
+Intraday timestamps beyond the final label boundary are currently rejected.
+A verified calendar is still needed to detect gaps in caller-supplied replay.
+
+Each prediction smooths only the available prefix using fixed fitted
+parameters; inference never refits or preserves test state between calls.
+Only closing prices are used; other research features are ignored. Intervals
+and confidence remain unset. Walk-forward fold creation remains Phase C.
+
+Implementation references: [SARIMAX](https://www.statsmodels.org/stable/generated/statsmodels.tsa.statespace.sarimax.SARIMAX.html)
+and [ETS smoothing with fixed parameters](https://www.statsmodels.org/stable/generated/statsmodels.tsa.exponential_smoothing.ets.ETSModel.smooth.html).
