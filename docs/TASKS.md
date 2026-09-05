@@ -9,9 +9,11 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 ## Current status (2026-09-05)
 
 - Phase A is complete. Phase B foundation (B1–B5) is committed as `40b4265`.
-- Latest validation: **269 tests passed** (45 forecasting + 60 modeling +
-  39 backtesting); Django system/migration checks and Black/isort/Ruff checks
-  passed locally. Remote CI has not been verified.
+- Latest validation: **`forecasting` suite 53 passed** (45 + 8 new B8 tree
+  tests); Django check and Black/isort/Ruff clean for `forecasting`. NOTE:
+  `backtesting` has 6 failing tests + 2 errors on `main`/this branch from an
+  uncommitted `Backtest.fit_mode` column with no migration — pre-existing,
+  unrelated to B8. Remote CI has not been verified.
 - Phase C (walk-forward backtesting) is complete as the standalone
   `backtesting` app over `modeling.TradingModel` — see the Phase C table and
   `docs/BACKTESTING.md`.
@@ -21,14 +23,17 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
   E2 / E3 (see the tables below). It uses sklearn `Pipeline` estimators + a
   single trailing holdout, **not** `forecasting.BasePredictor` prefix-replay
   or walk-forward.
-- **Next task for the strict `forecasting` path: B8 — `GradientBoostingPredictor`**
-  (`HistGradientBoostingRegressor`), reusing the `forecasting/linear.py`
-  fit/predict/guard contract and its round-trip tests, then B9 (optional LSTM)
-  and C-phase walk-forward.
-- B6 and B7 are complete (`forecasting/linear.py`: `ridge` / `elasticnet`,
-  full point-in-time feature frame, next-return target, scaler/imputer fit
-  inside the sklearn `Pipeline`). Walk-forward evaluation (Phase C) and the
-  forecasting dashboard's forecast panels (D4, D7, D8) remain pending.
+- **Next task for the strict `forecasting` path: B9 — optional PyTorch
+  `LstmPredictor`** (guarded soft import, registration skipped if the extra is
+  absent), then C-phase walk-forward for the `forecasting` predictors.
+- B6, B7 and B8 are complete. B7 (`forecasting/linear.py`) and B8
+  (`forecasting/trees.py`) share one fit/predict/leakage-guard base
+  (`forecasting/_frame_model.py::FrameModelPredictor`): full point-in-time
+  feature frame, next-return target, pinned feature schema. Linear adds an
+  imputer+scaler pipeline stage; `gradient_boosting`
+  (`HistGradientBoostingRegressor`) takes the raw matrix. Walk-forward
+  evaluation (Phase C) and the forecasting dashboard's forecast panels (D4,
+  D7, D8) remain pending.
 - The PSX data viewer is complete: authenticated browsing, fetch-and-save, date
   filters, closing-price chart and CSV export in `marketdata`. Its 25 market-data
   tests pass; live PSX connectivity and remote CI have not been verified.
@@ -69,7 +74,7 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | B5 | `naive.py`: `NaiveClosePredictor`, `DriftPredictor` (baselines) | ✅ | `naive` / `drift`; drift rejects inference before fitted labels are available |
 | B6 | `stats.py`: `SarimaPredictor`, `EtsPredictor` (`statsmodels`), refit per fold | ✅ | Training-only fits, prefix replay and cutoff guards; 11 new tests; fold orchestration remains C1 |
 | B7 | `linear.py`: `RidgePredictor` / `ElasticNetPredictor`, sklearn `Pipeline`, scaler fit inside `fit()` | ✅ | `forecasting/linear.py` — `ridge` / `elasticnet` `BasePredictor` subclasses over the full point-in-time feature frame; next-return target rebuilt to a close; imputer+scaler fit inside the `Pipeline`; feature schema pinned at fit; instrument + label-boundary guards mirror `drift`; 8 round-trip/guard tests |
-| B8 | `trees.py`: `GradientBoostingPredictor` (`HistGradientBoostingRegressor`) | 🟡 | `modeling` ships `gradient_boosting`/`hist_gbr` estimators; `forecasting.BasePredictor` version still ⬜ |
+| B8 | `trees.py`: `GradientBoostingPredictor` (`HistGradientBoostingRegressor`) | ✅ | `forecasting/trees.py` — `gradient_boosting` `BasePredictor` over the full point-in-time feature frame, sharing `_frame_model.FrameModelPredictor` with `linear.py` (no imputer/scaler stage; HGB handles NaNs natively). 8 round-trip/guard tests mirroring `test_linear.py` |
 | B9 | `deep.py`: `LstmPredictor` (PyTorch), guarded soft import, registration skipped if extra absent | 🟡 | `modeling/deep.py` `lstm` — torch soft-imported, registers `available=False` when absent; `forecasting` version still ⬜ |
 | B10 | `PredictionModel` model (`key`/`params`/`instruments`/`artifact_path`/`metrics`/`is_active`, `clean()` validates key) + migration | ✅ | Delivered as `modeling.TradingModel` (+`ModelTrainingRun`), superset; `clean()` validates estimator key + feature/target specs |
 | B11 | `Prediction` model (audit row, `actual_close` nullable, unique `(model, instrument, target_date)`) + migration | ✅ | Delivered as `modeling.ModelPrediction` — same shape (`actual_value`/`abs_error` nullable, unique `(model, instrument, target_date)`) |
@@ -77,7 +82,7 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | B13 | `management/commands/predict_price.py` (`SYMBOL MODEL_KEY --as-of --params`) | ✅ | `modeling` `predict_model <ID> <SYMBOL> --as-of [--target-date]` |
 | B14 | `management/commands/train_predictor.py` (`MODEL_ID --start --end`) → `artifact_path` | ✅ | `modeling` `train_model <ID> [--start --end]` → joblib artifact under `MODEL_ARTIFACT_DIR` |
 | B15 | `forecasting.tasks.run_daily_predictions` Celery task (unscheduled) | ✅ | `modeling.tasks.run_model_predictions` (+ `train_model_task`, `backfill_prediction_actuals`), unscheduled |
-| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | 🟡 | `forecasting` baseline + statistical + linear coverage done (45 tests); `modeling` has 60 tests (every estimator fits+predicts); `forecasting` tree/LSTM predictor coverage still pending |
+| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | 🟡 | `forecasting` baseline + statistical + linear + tree coverage done (53 tests); `modeling` has 60 tests (every estimator fits+predicts); `forecasting` optional-LSTM predictor coverage still pending |
 | B17 | `forecasting` admin registrations | ✅ | `modeling/admin.py` registers `TradingModel`/`ModelTrainingRun`/`ModelPrediction`; `forecasting` still has no models to register |
 
 ## Phase C — leakage-safe walk-forward backtesting
@@ -186,6 +191,20 @@ Validation: 213 tests passing; Django check, migration check, black, isort and r
   highlighting via `request.resolver_match.app_name`; styles in
   `marketdata/static/marketdata/dashboard.css`, gated on authentication.
   4 new tests (`marketdata/tests/test_nav.py`); suite green.
+
+- 2026-09-05 - B8 complete: `forecasting/trees.py` adds the `gradient_boosting`
+  `BasePredictor` (`HistGradientBoostingRegressor`) over the full point-in-time
+  feature frame. The shared fit/predict/leakage-guard machinery from
+  `linear.py` was extracted to `forecasting/_frame_model.py::FrameModelPredictor`;
+  `_LinearPredictor` now only overrides `_build_pipeline` to add the
+  imputer+scaler stage, while the tree predictor uses the default pipeline
+  (HGB handles NaNs natively, no scaling needed). Same next-return target,
+  `close * (1 + r)` reconstruction, pinned schema / instrument / `fitted_through`
+  guards and failed-refit clearing. `random_state` pinned by default.
+  8 new tests (`test_trees.py`) mirroring `test_linear.py` plus a NaN-tolerance
+  case. `forecasting` suite 53 passing; Django check, black, isort, ruff clean.
+  Next: B9 (optional PyTorch LSTM). Informed by the knowledge-base pattern
+  `ml/configurable-model-training.md`.
 
 - 2026-09-05 - Phase C complete: new `backtesting` app - walk-forward
   retrain/score of a `modeling.TradingModel` + forecast->trade->equity

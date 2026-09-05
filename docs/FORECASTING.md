@@ -1,9 +1,10 @@
 # Forecasting foundation
 
-Phase B tasks B1–B7 are implemented. The Django `forecasting` app registers
+Phase B tasks B1–B8 are implemented. The Django `forecasting` app registers
 `naive` (last observed close), `drift` (mean training-period one-step price
-change), `sarima`/`ets` (univariate statistical), and `ridge`/`elasticnet`
-(regularised linear over the full feature frame). Every predictor returns
+change), `sarima`/`ets` (univariate statistical), `ridge`/`elasticnet`
+(regularised linear over the full feature frame), and `gradient_boosting`
+(histogram gradient-boosted trees over the same feature frame). Every predictor returns
 `PricePrediction` objects with a target date, feature hash and model key.
 None create orders or write predictions.
 
@@ -74,10 +75,10 @@ The hashes identify assembled feature values, not full dataset versions.
 
 ## Next tasks
 
-Continue B8–B9 with the tree / optional-LSTM predictors, then B10–B17 with
-configured models, forecast persistence, commands and daily tasks. B16 has
-baseline, statistical and linear coverage; the tree/LSTM predictors still
-need round-trip tests. Phase C adds walk-forward validation. See
+B9 (optional PyTorch LSTM) is the remaining Phase B predictor, then B10–B17
+with configured models, forecast persistence, commands and daily tasks. B16
+has baseline, statistical, linear and tree coverage; the optional LSTM still
+needs round-trip tests. Phase C adds walk-forward validation. See
 [TASKS.md](TASKS.md).
 
 ## Statistical predictors (B6)
@@ -139,3 +140,21 @@ not just the close. `RidgePredictor(alpha=1.0)` and
   order. Intervals and confidence stay `None` — these models do not estimate
   calibrated uncertainty. A pathological predicted return below `-100%` makes
   the reconstructed close non-positive and raises rather than being clipped.
+
+## Gradient-boosted trees (B8)
+
+`get_predictor_class("gradient_boosting")()` is a `GradientBoostingPredictor`
+wrapping sklearn's `HistGradientBoostingRegressor`. It shares every part of
+the linear (B7) contract — same next-session simple-return target, same
+`price.close * (1 + predicted_return)` reconstruction, same pinned
+feature-schema / instrument / `fitted_through` guards, same failed-refit
+state clearing, same per-row independence and unset intervals — through the
+common `forecasting._frame_model.FrameModelPredictor` base.
+
+The one difference is the pipeline: `HistGradientBoostingRegressor` handles
+NaNs natively and needs no feature scaling, so the pipeline is just the
+estimator (no `SimpleImputer`, no `StandardScaler`). Configurable via
+`GradientBoostingPredictor(learning_rate=0.1, max_iter=200, max_depth=None,
+min_samples_leaf=20, l2_regularization=0.0, random_state=0)`; `random_state`
+is pinned by default for reproducible fits. At least five training rows are
+required.

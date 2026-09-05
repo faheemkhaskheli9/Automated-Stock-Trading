@@ -182,8 +182,8 @@ When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 ## Forecasting foundation (Phase 7, B1-B7 complete)
 
 `research` supplies technical/news/fundamental/social features. The new
-`forecasting` app registers `naive`, `drift`, `sarima`, `ets`, `ridge` and
-`elasticnet` predictors through
+`forecasting` app registers `naive`, `drift`, `sarima`, `ets`, `ridge`,
+`elasticnet` and `gradient_boosting` predictors through
 `apps.ready()`. `TrainingFrame` separates future labels and label-availability
 timestamps from `PredictionFrame` inputs. `assemble_training_frame` retains
 warmup history but only labels observable by its aware `end` timestamp.
@@ -198,8 +198,11 @@ Usage and limitations: `docs/FORECASTING.md`. Keep `docs/TASKS.md` updated;
 B6 adds `sarima`/`ets` statistical predictors with training-only parameter fits and prefix replay.
 B7 (`forecasting/linear.py`) adds `ridge`/`elasticnet` over the full point-in-time feature frame:
 next-return target rebuilt to a close, imputer+scaler fit inside an sklearn `Pipeline`, feature
-schema pinned at fit, row-independent prediction (no prefix replay). B8 (`GradientBoostingPredictor`)
-is next. See `docs/FORECASTING.md`.
+schema pinned at fit, row-independent prediction (no prefix replay). B8 (`forecasting/trees.py`)
+adds `gradient_boosting` (`HistGradientBoostingRegressor`) over the same frame; B7 and B8 share
+`forecasting/_frame_model.py::FrameModelPredictor` (the tree path skips the imputer/scaler stage
+since HGB handles NaNs natively). B9 (optional PyTorch `LstmPredictor`) is next. See
+`docs/FORECASTING.md`.
 
 ## `modeling` app (Phase 7, configurable-model studio)
 
