@@ -1,0 +1,9 @@
+{% load static %}
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PSX Observatory</title><link rel="stylesheet" href="{% static 'marketdata/dashboard.css' %}"></head>
+<body>
+<header><a class="brand" href="{% url 'marketdata:dashboard' %}"><span class="brand-icon">P</span> PSX <span>Observatory</span></a><div class="header-right"><span class="badge">DAILY MARKET DATA</span>{% if user.is_authenticated %}<form method="post" action="{% url 'marketdata:logout' %}">{% csrf_token %}<button class="text-button">Sign out</button></form>{% endif %}</div></header>
+{% block content %}{% endblock %}
+<footer>PSX Observatory <span>Historical prices · Stored in your app database · PKR</span></footer>
+</body></html>

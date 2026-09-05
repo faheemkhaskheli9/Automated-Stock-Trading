@@ -1,0 +1,2 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}<main class="login panel"><p class="eyebrow">YOUR MARKET WORKSPACE</p><h1>Welcome back.</h1><p class="muted">Sign in to explore and save PSX market history.</p><form method="post">{% csrf_token %}{{ form.as_p }}<input type="hidden" name="next" value="{{ next }}"><button class="primary">Sign in</button></form></main>{% endblock %}

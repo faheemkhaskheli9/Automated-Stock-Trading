@@ -19,6 +19,7 @@ from django.contrib import admin
 from django.urls import include, path
 
 urlpatterns = [
+    path("", include("marketdata.urls")),
     path("admin/", admin.site.urls),
     path("api/", include("api.urls")),
     # Session login/logout for the browsable API - convenient in dev; the

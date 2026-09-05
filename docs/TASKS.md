@@ -15,7 +15,10 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 - **Next task: B7 — Ridge and ElasticNet predictors**, fitted only on supplied
   training history, with baseline comparisons and predictor round-trip tests.
 - B6 is complete. B16 covers baselines and statistical predictors. Persistence, prediction
-  commands, walk-forward evaluation and the web dashboard remain pending.
+  commands, walk-forward evaluation and the forecasting dashboard remain pending.
+- The PSX data viewer is complete: authenticated browsing, fetch-and-save, date
+  filters, closing-price chart and CSV export in `marketdata`. Its 25 market-data
+  tests pass; live PSX connectivity and remote CI have not been verified.
 - Usage and timing limitations: [FORECASTING.md](FORECASTING.md).
 
 ---
@@ -81,18 +84,23 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 
 ## Phase D — `dashboard` app (web UI)
 
+The initial PSX viewer lives in `marketdata` and uses Django templates, CSS and SVG.
+It provides a foundation for D1-D3 and D9-D10; the full forecasting dashboard,
+HTMX/Plotly integration and its remaining pages/tests are still pending.
+
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| D1 | Create `dashboard` app; add `django-htmx` (middleware); base template with Tailwind + vendored Plotly | ⬜ | |
-| D2 | Instruments page — searchable table, last close, last prediction vs actual | ⬜ | |
-| D3 | Symbol detail — Plotly candlestick + volume; HTMX indicator overlay toggles | ⬜ | |
+| D0 | PSX daily-data viewer with database persistence | ✅ | Fetch/save with upserts, saved-symbol navigation, date filters, SVG close chart, paginated OHLCV, CSV export, authentication and import permission; 25 market-data tests pass |
+| D1 | Create `dashboard` app; add `django-htmx` (middleware); base template with Tailwind + vendored Plotly | 🟡 | PSX viewer foundation complete in marketdata; full forecasting dashboard scope pending |
+| D2 | Instruments page — searchable table, last close, last prediction vs actual | 🟡 | PSX viewer foundation complete in marketdata; full forecasting dashboard scope pending |
+| D3 | Symbol detail — Plotly candlestick + volume; HTMX indicator overlay toggles | 🟡 | PSX viewer foundation complete in marketdata; full forecasting dashboard scope pending |
 | D4 | Symbol detail — latest-forecast panel (predicted close, interval, model, confidence) | ⬜ | |
 | D5 | Symbol detail — news headlines + sentiment chips; social/fundamentals "not configured" panels | ⬜ | |
 | D6 | Predictors page — registry catalogue (key, trainable, available) + configured models + last metrics | ⬜ | |
 | D7 | Backtest runner — form → HTMX POST → per-fold table, skill badge, predicted-vs-actual chart, equity curve; persist `BacktestRun` | ⬜ | |
 | D8 | Accuracy leaderboard — rank active models by rolling MAE / directional acc / skill score | ⬜ | |
-| D9 | Wire `dashboard` URLs; `login_required` on all views; nav | ⬜ | |
-| D10 | View tests (auth required; pages render with fixture data) | ⬜ | |
+| D9 | Wire `dashboard` URLs; `login_required` on all views; nav | 🟡 | PSX viewer foundation complete in marketdata; full forecasting dashboard scope pending |
+| D10 | View tests (auth required; pages render with fixture data) | 🟡 | PSX viewer foundation complete in marketdata; full forecasting dashboard scope pending |
 
 ## Phase E — API, wiring, docs
 
