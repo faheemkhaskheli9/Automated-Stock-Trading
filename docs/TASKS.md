@@ -9,13 +9,20 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 ## Current status (2026-09-05)
 
 - Phase A is complete. Phase B foundation (B1–B5) is committed as `40b4265`.
-- Latest validation: **144 tests passed**, including 32 forecasting tests;
+- Latest validation: **213 tests passed** (32 forecasting + 60 modeling);
   Django system/migration checks and Black/isort/Ruff checks passed locally.
   Remote CI has not been verified.
-- **Next task: B7 — Ridge and ElasticNet predictors**, fitted only on supplied
-  training history, with baseline comparisons and predictor round-trip tests.
-- B6 is complete. B16 covers baselines and statistical predictors. Persistence, prediction
-  commands, walk-forward evaluation and the forecasting dashboard remain pending.
+- The `modeling` app (commit `11a4bf0`, branch `phase7-modeling-app`)
+  delivers the configurable-model + persistence intent as a **parallel app**
+  to `forecasting`: covers B10–B15, B17 and D6, and partially B7–B9 / B16 /
+  E2 / E3 (see the tables below). It uses sklearn `Pipeline` estimators + a
+  single trailing holdout, **not** `forecasting.BasePredictor` prefix-replay
+  or walk-forward.
+- **Next task for the strict `forecasting` path: B7 — Ridge/ElasticNet as
+  `BasePredictor` subclasses** (fitted only on supplied training history,
+  prefix replay, round-trip tests), then C-phase walk-forward.
+- B6 is complete. Walk-forward evaluation (Phase C) and the forecasting
+  dashboard's forecast panels (D4, D7, D8) remain pending.
 - The PSX data viewer is complete: authenticated browsing, fetch-and-save, date
   filters, closing-price chart and CSV export in `marketdata`. Its 25 market-data
   tests pass; live PSX connectivity and remote CI have not been verified.
@@ -55,17 +62,17 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | B4 | `features.py`: `assemble_training_frame()` — lag/return features + `research` bundle as-of each bar; target = next close | ✅ | Completed-day availability; aligned next-observed labels; cutoff feature hashes; no future labels in inputs |
 | B5 | `naive.py`: `NaiveClosePredictor`, `DriftPredictor` (baselines) | ✅ | `naive` / `drift`; drift rejects inference before fitted labels are available |
 | B6 | `stats.py`: `SarimaPredictor`, `EtsPredictor` (`statsmodels`), refit per fold | ✅ | Training-only fits, prefix replay and cutoff guards; 11 new tests; fold orchestration remains C1 |
-| B7 | `linear.py`: `RidgePredictor` / `ElasticNetPredictor`, sklearn `Pipeline`, scaler fit inside `fit()` | ⬜ | |
-| B8 | `trees.py`: `GradientBoostingPredictor` (`HistGradientBoostingRegressor`) | ⬜ | |
-| B9 | `deep.py`: `LstmPredictor` (PyTorch), guarded soft import, registration skipped if extra absent | ⬜ | `requirements-ml.txt` |
-| B10 | `PredictionModel` model (`key`/`params`/`instruments`/`artifact_path`/`metrics`/`is_active`, `clean()` validates key) + migration | ⬜ | |
-| B11 | `Prediction` model (audit row, `actual_close` nullable, unique `(model, instrument, target_date)`) + migration | ⬜ | |
-| B12 | `services.make_prediction()` (only writer of `Prediction`) + `backfill_actuals()` | ⬜ | |
-| B13 | `management/commands/predict_price.py` (`SYMBOL MODEL_KEY --as-of --params`) | ⬜ | |
-| B14 | `management/commands/train_predictor.py` (`MODEL_ID --start --end`) → `artifact_path` | ⬜ | |
-| B15 | `forecasting.tasks.run_daily_predictions` Celery task (unscheduled) | ⬜ | |
-| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | 🟡 | Baseline and statistical coverage done (32 forecasting tests); ML predictor coverage pending |
-| B17 | `forecasting` admin registrations | ⬜ | |
+| B7 | `linear.py`: `RidgePredictor` / `ElasticNetPredictor`, sklearn `Pipeline`, scaler fit inside `fit()` | 🟡 | `modeling` app ships `ridge`/`elasticnet` as sklearn-`Pipeline` estimators; native `forecasting.BasePredictor` subclasses with prefix-replay still ⬜ |
+| B8 | `trees.py`: `GradientBoostingPredictor` (`HistGradientBoostingRegressor`) | 🟡 | `modeling` ships `gradient_boosting`/`hist_gbr` estimators; `forecasting.BasePredictor` version still ⬜ |
+| B9 | `deep.py`: `LstmPredictor` (PyTorch), guarded soft import, registration skipped if extra absent | 🟡 | `modeling/deep.py` `lstm` — torch soft-imported, registers `available=False` when absent; `forecasting` version still ⬜ |
+| B10 | `PredictionModel` model (`key`/`params`/`instruments`/`artifact_path`/`metrics`/`is_active`, `clean()` validates key) + migration | ✅ | Delivered as `modeling.TradingModel` (+`ModelTrainingRun`), superset; `clean()` validates estimator key + feature/target specs |
+| B11 | `Prediction` model (audit row, `actual_close` nullable, unique `(model, instrument, target_date)`) + migration | ✅ | Delivered as `modeling.ModelPrediction` — same shape (`actual_value`/`abs_error` nullable, unique `(model, instrument, target_date)`) |
+| B12 | `services.make_prediction()` (only writer of `Prediction`) + `backfill_actuals()` | ✅ | `modeling.prediction.predict` (sole `ModelPrediction` writer) + `backfill_actuals()` |
+| B13 | `management/commands/predict_price.py` (`SYMBOL MODEL_KEY --as-of --params`) | ✅ | `modeling` `predict_model <ID> <SYMBOL> --as-of [--target-date]` |
+| B14 | `management/commands/train_predictor.py` (`MODEL_ID --start --end`) → `artifact_path` | ✅ | `modeling` `train_model <ID> [--start --end]` → joblib artifact under `MODEL_ARTIFACT_DIR` |
+| B15 | `forecasting.tasks.run_daily_predictions` Celery task (unscheduled) | ✅ | `modeling.tasks.run_model_predictions` (+ `train_model_task`, `backfill_prediction_actuals`), unscheduled |
+| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | 🟡 | `forecasting` baseline+statistical coverage done (32 tests); `modeling` has 60 tests (every estimator fits+predicts); `forecasting` ML-predictor coverage still pending |
+| B17 | `forecasting` admin registrations | ✅ | `modeling/admin.py` registers `TradingModel`/`ModelTrainingRun`/`ModelPrediction`; `forecasting` still has no models to register |
 
 ## Phase C — leakage-safe walk-forward backtesting
 
@@ -96,7 +103,7 @@ HTMX/Plotly integration and its remaining pages/tests are still pending.
 | D3 | Symbol detail — Plotly candlestick + volume; HTMX indicator overlay toggles | 🟡 | PSX viewer foundation complete in marketdata; full forecasting dashboard scope pending |
 | D4 | Symbol detail — latest-forecast panel (predicted close, interval, model, confidence) | ⬜ | |
 | D5 | Symbol detail — news headlines + sentiment chips; social/fundamentals "not configured" panels | ⬜ | |
-| D6 | Predictors page — registry catalogue (key, trainable, available) + configured models + last metrics | ⬜ | |
+| D6 | Predictors page — registry catalogue (key, trainable, available) + configured models + last metrics | ✅ | `modeling` `/modeling/estimators/` (catalogue: key/task/available/params) + `/modeling/` (configured models + last holdout metric) |
 | D7 | Backtest runner — form → HTMX POST → per-fold table, skill badge, predicted-vs-actual chart, equity curve; persist `BacktestRun` | ⬜ | |
 | D8 | Accuracy leaderboard — rank active models by rolling MAE / directional acc / skill score | ⬜ | |
 | D9 | Wire `dashboard` URLs; `login_required` on all views; nav | 🟡 | PSX viewer foundation complete in marketdata; full forecasting dashboard scope pending |
@@ -107,8 +114,8 @@ HTMX/Plotly integration and its remaining pages/tests are still pending.
 | # | Task | Status | Notes |
 |---|------|--------|-------|
 | E1 | DRF read viewsets: `Prediction`, `BacktestRun`, `ResearchSnapshot`, `NewsItem`; `PredictionModel` (`is_active`-only writable) | ⬜ | |
-| E2 | `requirements.txt`: `scikit-learn`, `statsmodels`, `pandas-ta`, `vaderSentiment`, `feedparser`, `django-htmx`, `plotly` | ⬜ | |
-| E3 | `requirements-ml.txt`: `torch` (+ `docs/DEPLOYMENT.md` note) | ⬜ | |
+| E2 | `requirements.txt`: `scikit-learn`, `statsmodels`, `pandas-ta`, `vaderSentiment`, `feedparser`, `django-htmx`, `plotly` | 🟡 | `scikit-learn`, `statsmodels`, `vaderSentiment`, `feedparser` present; `pandas-ta`/`django-htmx`/`plotly` still pending (dashboard) |
+| E3 | `requirements-ml.txt`: `torch` (+ `docs/DEPLOYMENT.md` note) | 🟡 | `requirements-ml.txt` created (`torch`, used only by `modeling` `lstm`); `docs/DEPLOYMENT.md` note still ⬜ |
 | E4 | Update `docs/PLAN.md` — add Phase 7 summary | ✅ | Phase 7 summary already present |
 | E5 | Update `CLAUDE.md` — per-app breakdown for `research` / `forecasting` / `dashboard` | 🟡 | Forecasting foundation documented in `40b4265`; complete app breakdowns as remaining phases land |
 | E6 | Update `docs/DEPLOYMENT.md` — new deps, model-artifact storage, `sync_research` + `run_daily_predictions` schedules | ⬜ | |
