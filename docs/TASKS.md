@@ -42,6 +42,12 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 - The PSX data viewer is complete: authenticated browsing, fetch-and-save, date
   filters, closing-price chart and CSV export in `marketdata`. Its 25 market-data
   tests pass; live PSX connectivity and remote CI have not been verified.
+- Web UI shell: a shared authenticated menubar in `marketdata/base.html`
+  (Market Data / Backtesting / Modeling / Admin / API) and a `strategies`
+  backtesting page at `/backtesting/` (rule or saved strategy vs stored
+  daily bars → equity curve + stats + trade ledger + CSV, with next-open
+  fills and commission/slippage costs). Both are separate from the pending
+  forecasting dashboard (D1–D10).
 - Usage and timing limitations: [FORECASTING.md](FORECASTING.md).
 
 ---
@@ -269,3 +275,19 @@ Validation: 213 tests passing; Django check, migration check, black, isort and r
   fit-mode column, grouped form sections). test_frozen fixtures made realistic
   (history ends today, past `train_end`); +1 fallback test; full suite 285
   passing; black/ruff clean.
+
+- 2026-09-06 - Web UI shell landed (committed): the shared authenticated
+  menubar in `marketdata/base.html` (Market Data / Backtesting / Modeling /
+  Admin / API, active section via `resolver_match.app_name`) plus a
+  `strategies` backtesting page at `/backtesting/`. The page replays a rule
+  strategy - or a saved `Strategy` with `view_strategy` permission - over
+  stored daily `PriceBar`s for one instrument and renders an equity curve,
+  performance stats and a trade ledger with CSV export.
+  `strategies.backtesting.engine.run_backtest` gained `next_open` (fill at
+  the following bar's open; final-bar signals unfilled), `commission_bps` /
+  `slippage_bps` (cost per fill, on `Trade.fees`, netted from `Trade.pnl`),
+  input guards, and drawdown measured from `initial_cash`. 13 new tests
+  (`strategies/tests/test_views.py` + engine guard/cost/timing cases,
+  `marketdata/tests/test_nav.py`); full suite 298 passed, 6 skipped;
+  black/isort/ruff + Django check clean. Still separate from the pending
+  forecasting dashboard (D1-D10).
