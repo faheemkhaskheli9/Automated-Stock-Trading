@@ -28,18 +28,24 @@ def artifacts_dir(settings, tmp_path):
     return tmp_path
 
 
+TRAIN_END_DAYS_AGO = 160
+
+
 @pytest.fixture
 def inst():
-    """History straddling 'now' so there are sessions after the artifact's
-    (wall-clock) trained_at date to score."""
+    """~400 sessions of history ending today (no future bars - the realistic
+    shape). The model below is trained only through ``TRAIN_END_DAYS_AGO``, so
+    the tail is genuine out-of-sample data for the frozen artifact."""
     obj = make_instrument("ENGRO")
-    make_price_series(obj, n=460, start=datetime.now(timezone.utc) - timedelta(days=250))
+    make_price_series(obj, n=400, start=datetime.now(timezone.utc) - timedelta(days=400))
     return obj
 
 
 @pytest.fixture
 def trained_model(inst, artifacts_dir):
     model = make_trading_model([inst], estimator_key="ridge")
+    model.train_end = (datetime.now(timezone.utc) - timedelta(days=TRAIN_END_DAYS_AGO)).date()
+    model.save()
     run = train_model(model)
     assert run.status == ModelTrainingRun.Status.SUCCESS, run.error
     model.refresh_from_db()
@@ -62,19 +68,20 @@ def test_frozen_run_scores_one_pseudo_fold(trained_model):
     assert run.equity_curve
 
 
-def test_frozen_only_scores_sessions_after_trained_at(trained_model):
+def test_frozen_only_scores_sessions_after_the_training_cutoff(trained_model):
     bt = make_backtest(trained_model, fit_mode="frozen_artifact")
     run = run_backtest(bt)
     assert run.status == BacktestRun.Status.SUCCESS, run.error
 
     fold = BacktestFold.objects.get(run=run)
-    trained_date = fold.train_end
+    cutoff = fold.train_end
+    assert cutoff == trained_model.train_end  # the model's train_end, not wall-clock now
     tz = ZoneInfo(dj_settings.TIME_ZONE)
     earliest = min(
         p.as_of.astimezone(tz).date() for p in BacktestPrediction.objects.filter(run=run)
     )
-    assert earliest > trained_date
-    assert fold.test_start > trained_date
+    assert earliest > cutoff
+    assert fold.test_start > cutoff
 
 
 def test_frozen_without_artifact_fails_cleanly(inst, artifacts_dir):
@@ -97,6 +104,21 @@ def test_frozen_pins_a_specific_training_run(trained_model):
 
     assert run.status == BacktestRun.Status.SUCCESS, run.error
     assert run.n_predictions > 0
+
+
+def test_frozen_falls_back_to_model_train_end_for_old_artifacts(trained_model):
+    """Artifacts trained before the ``train_end`` key existed still get the
+    right boundary from the live model field."""
+    import joblib
+
+    path = trained_model.artifact_path
+    payload = joblib.load(path)
+    payload.pop("train_end", None)
+    joblib.dump(payload, path)
+
+    bt = make_backtest(trained_model, fit_mode="frozen_artifact")
+    run = run_backtest(bt)
+    assert run.status == BacktestRun.Status.SUCCESS, run.error
 
 
 def test_walk_forward_is_still_the_default(trained_model):

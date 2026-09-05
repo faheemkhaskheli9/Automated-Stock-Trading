@@ -27,7 +27,7 @@ Leakage control:
 from __future__ import annotations
 
 import logging
-from datetime import datetime, time
+from datetime import date, datetime, time
 
 import joblib
 import numpy as np
@@ -284,13 +284,24 @@ def _score_frozen(
         trained_at = trained_at.tz_localize("UTC")
     trained_date = trained_at.tz_convert(tz).date()
 
-    test_mask = decision_dates > trained_date
+    # Out-of-sample boundary: the artifact could only have trained on labels
+    # observable by the *earlier* of (when training ran) and (its configured
+    # ``train_end``). Sessions strictly after that are genuine hold-out. Older
+    # artifacts predate the ``train_end`` key - fall back to the model's field.
+    payload_end = payload.get("train_end")
+    model_end = model.train_end.isoformat() if model.train_end else None
+    configured_end = payload_end or model_end
+    oos_after = trained_date
+    if configured_end:
+        oos_after = min(trained_date, date.fromisoformat(configured_end))
+
+    test_mask = decision_dates > oos_after
     n_test = int(test_mask.sum())
     if n_test < MIN_TRAIN_ROWS:
         raise ValueError(
-            f"Only {n_test} sessions of history after the artifact was trained "
-            f"({trained_date.isoformat()}) - not enough to score. Train the model on an "
-            "earlier window, or import more recent price data."
+            f"Only {n_test} sessions of history after the artifact's training cut-off "
+            f"({oos_after.isoformat()}) - not enough to score. Set the model's train_end to "
+            "an earlier date and retrain, or import more recent price data."
         )
     test_idx = np.flatnonzero(test_mask)
 
@@ -311,8 +322,8 @@ def _score_frozen(
         BacktestFold(
             run=run,
             fold_index=0,
-            train_start=model.train_start or trained_date,
-            train_end=trained_date,
+            train_start=model.train_start or oos_after,
+            train_end=oos_after,
             test_start=min(test_dates),
             test_end=max(test_dates),
             n_train=0,
@@ -344,7 +355,14 @@ def _execute(bt, run) -> None:
     model = bt.model
     target_type = bt.target_type
 
-    ds = build_dataset(model, start=bt.start, end=bt.end, for_training=True)
+    # ``build_dataset`` falls back to ``model.train_end`` when no end is given.
+    # For frozen-artifact scoring that would cap the evaluation window at the
+    # training cut-off, leaving nothing out-of-sample to score - the backtest
+    # must reach forward to today (or its own explicit ``end``).
+    ds_end = bt.end
+    if bt.fit_mode == bt.FitMode.FROZEN_ARTIFACT and ds_end is None:
+        ds_end = timezone.localdate()
+    ds = build_dataset(model, start=bt.start, end=ds_end, for_training=True)
     if getattr(ds, "multioutput", False):
         raise ValueError("Multi-output targets are not backtestable in v1")
 

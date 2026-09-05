@@ -12,16 +12,29 @@
     </div>
   </div>
   {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+  {% if latest and latest.status == 'failed' %}<div class="notice error">Last run failed: {{ latest.error }}</div>{% endif %}
 
   <div class="panel controls">
     <h2>Configuration</h2>
     <p class="muted">Instruments: {% for i in backtest.model.instruments.all %}{{ i.symbol }}{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}</p>
-    <pre class="spec">fit_mode     = {{ backtest.fit_mode }}{% if backtest.fit_mode == 'frozen_artifact' %}   training_run = {{ backtest.training_run_id|default:"(model's latest artifact)" }}{% endif %}
-scheme       = {{ backtest.scheme }}{% if backtest.fit_mode == 'frozen_artifact' %}   (fold windows ignored){% endif %}
-train_span   = {{ backtest.train_span }}   test_span = {{ backtest.test_span }}   step = {{ backtest.step }}   gap = {{ backtest.gap }}
-date range   = {{ backtest.start|default:"(all)" }} &rarr; {{ backtest.end|default:"(all)" }}
+    {% if backtest.fit_mode == 'frozen_artifact' %}
+    <pre class="spec">fit_mode     = frozen_artifact   (scores the trained artifact; fold windows below are ignored)
+training_run = {{ backtest.training_run_id|default:"(model's latest artifact)" }}
+artifact     = {{ backtest.artifact_path|default:"(none - train the model first)" }}
+trained_at   = {{ backtest.model.trained_at|default:"(never trained)" }}
+model train_end = {{ backtest.model.train_end|default:"(none - trained through today)" }}
+date range   = {{ backtest.start|default:"(training cut-off)" }} &rarr; {{ backtest.end|default:"(today)" }}
 long_threshold = {{ backtest.long_threshold }}   allow_short = {{ backtest.allow_short }}
 costs        = {{ backtest.commission_bps }} bps commission + {{ backtest.slippage_bps }} bps slippage   cash = {{ backtest.initial_cash }}</pre>
+    <p class="muted">Only sessions after the earlier of <code>trained_at</code> and the model's <code>train_end</code> are scored - those are genuinely out-of-sample for this artifact.</p>
+    {% else %}
+    <pre class="spec">fit_mode     = walk_forward   (retrains a fresh pipeline every fold)
+scheme       = {{ backtest.scheme }}
+train_span   = {{ backtest.train_span }}   test_span = {{ backtest.test_span }}   step = {{ backtest.step }}   gap = {{ backtest.gap }}
+date range   = {{ backtest.start|default:"(all)" }} &rarr; {{ backtest.end|default:"(model train_end)" }}
+long_threshold = {{ backtest.long_threshold }}   allow_short = {{ backtest.allow_short }}
+costs        = {{ backtest.commission_bps }} bps commission + {{ backtest.slippage_bps }} bps slippage   cash = {{ backtest.initial_cash }}</pre>
+    {% endif %}
   </div>
 
   {% if latest and latest.status == 'success' %}

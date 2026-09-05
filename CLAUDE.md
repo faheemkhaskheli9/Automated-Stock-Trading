@@ -274,9 +274,13 @@ dependencies.
   whose label wasn't observable before that fold's first test decision;
   `_score_frozen` `joblib.load`s the model's stored artifact, checks
   `feature_names`/`target_spec` still match, and scores every row dated
-  strictly after the artifact's `trained_at` as one pseudo-fold. Both feed the
-  same forecast->position->equity tail. Persists everything; failures land on
-  the run.
+  strictly after the artifact's training cut-off (`min(trained_at, train_end)`,
+  both recorded in the artifact by `modeling.training`; pre-existing artifacts
+  fall back to the live `TradingModel.train_end`) as one pseudo-fold - and
+  builds that scoring dataset out to today, not capped at `model.train_end`, so
+  a model trained on a past window still has sessions left to score. Both feed
+  the same forecast->position->equity tail. Persists everything; failures land
+  on the run.
 - `metrics.py`: `positions_from_forecast` + per-instrument
   `simulate_instrument` (all-in/all-out, cost on every position change) +
   `combine_equity_curves` (equal cash split, forward-filled union).

@@ -44,6 +44,19 @@ def test_regression_estimators_train_and_persist(inst, estimator_key):
     assert run.model.artifact_path == run.artifact_path
 
 
+def test_artifact_records_the_training_window(inst):
+    import joblib
+
+    model = _model([inst], "ridge", {"type": "horizon_close", "horizon": 1})
+    run = train_model(model)
+    assert run.status == ModelTrainingRun.Status.SUCCESS, run.error
+
+    payload = joblib.load(run.artifact_path)
+    # frozen-artifact backtesting reads these to place the out-of-sample boundary
+    assert payload["train_end"] == model.train_end.isoformat()
+    assert "train_start" in payload
+
+
 def test_direction_target_with_logistic(inst):
     run = train_model(_model([inst], "logistic", {"type": "direction", "horizon": 1}))
     assert run.status == ModelTrainingRun.Status.SUCCESS, run.error

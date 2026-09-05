@@ -256,3 +256,16 @@ Validation: 213 tests passing; Django check, migration check, black, isort and r
   tests (`test_frozen.py`); full suite 282 passing; black/isort/ruff clean.
   Informed by `ml/configurable-model-training.md` (artifact feature-name
   guard, never-raise entry point).
+
+- 2026-09-06 - `frozen_artifact` fix: a frozen backtest on a real
+  `modeling`-trained model always failed ("0 sessions after the artifact was
+  trained") - it gated on the wall-clock `trained_at` *and* capped the scoring
+  dataset at `model.train_end`, so nothing was left out-of-sample. Now
+  `modeling.training` records `train_start`/`train_end` in the artifact, and
+  `engine._score_frozen` uses `min(trained_at, train_end)` as the boundary
+  (old artifacts fall back to the live `TradingModel.train_end`) while
+  `_execute` builds the frozen scoring dataset out to today. Detail/index/form
+  UI reworked for the two fit modes (per-mode config panel, failure banner,
+  fit-mode column, grouped form sections). test_frozen fixtures made realistic
+  (history ends today, past `train_end`); +1 fallback test; full suite 285
+  passing; black/ruff clean.

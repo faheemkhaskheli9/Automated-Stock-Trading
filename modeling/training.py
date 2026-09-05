@@ -88,6 +88,12 @@ def train_model(model, *, start=None, end=None, created_by=None) -> ModelTrainin
 
         scores = _score(pipeline, dataset)
         now = timezone.now()
+        # The effective training cut-off this artifact actually saw. Frozen-
+        # artifact backtesting needs it to know which later sessions are truly
+        # out-of-sample - ``trained_at`` (wall clock) is not that boundary when
+        # training was deliberately stopped at a past ``train_end``.
+        effective_start = start or model.train_start
+        effective_end = end or model.train_end
         artifact_path = settings.MODEL_ARTIFACT_DIR / f"model_{model.pk}_run_{run.pk}.joblib"
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
         joblib.dump(
@@ -101,6 +107,8 @@ def train_model(model, *, start=None, end=None, created_by=None) -> ModelTrainin
                 "multioutput": dataset.multioutput,
                 "symbols": dataset.symbols,
                 "trained_at": now.isoformat(),
+                "train_start": effective_start.isoformat() if effective_start else None,
+                "train_end": effective_end.isoformat() if effective_end else None,
             },
             artifact_path,
         )

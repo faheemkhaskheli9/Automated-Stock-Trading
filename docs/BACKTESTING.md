@@ -60,8 +60,13 @@ Celery (unscheduled): `backtesting.tasks.run_backtest_task(backtest_id)`,
    artifact (`Backtest.artifact_path`: the pinned `training_run`'s, else the
    model's latest), assert its `feature_names` / `target_spec` still match the
    model, then predict every row whose local decision date is **strictly
-   after** the artifact's `trained_at` date. Recorded as a single fold
-   (`fold_index=0`, `n_train=0`, `train_end` = the trained-at date).
+   after** the artifact's training cut-off - the earlier of its `trained_at`
+   date and its `train_end` (recorded in the artifact; older artifacts fall
+   back to the live `TradingModel.train_end`). The scoring dataset itself is
+   built out to today (or `Backtest.end`), *not* capped at `model.train_end`,
+   so a model trained on a past window actually has sessions left to score.
+   Recorded as a single fold (`fold_index=0`, `n_train=0`, `train_end` = that
+   cut-off date).
 4. Forecasts -> positions (`metrics.positions_from_forecast`) -> a per-
    instrument all-in/all-out simulation (`metrics.simulate_instrument`,
    costs applied on every position change) -> one pooled portfolio equity
@@ -84,11 +89,10 @@ Celery (unscheduled): `backtesting.tasks.run_backtest_task(backtest_id)`,
 - `generate_folds` asserts `train_end < test_start` for every fold and leaves
   `gap` sessions between them.
 - `frozen_artifact` scores only sessions strictly after the artifact's
-  `trained_at` local date - the artifact never trained on a label observable
-  that late, so those rows are genuinely out-of-sample. (In production
-  `train_model` runs on near-real-time data, so `trained_at` tracks the last
-  available bar. Pin an old `training_run` and this cutoff still uses *that
-  run's* `trained_at`.)
+  training cut-off (`min(trained_at, train_end)`, both taken from the
+  artifact) - the artifact never trained on a label observable that late, so
+  those rows are genuinely out-of-sample. Pin an old `training_run` and this
+  cutoff uses *that run's* recorded values.
 - `test_walkforward.py` (randomised fold configs), `test_leakage.py` (per-fold
   availability + disjointness), `test_engine.py` (`naive` skill-vs-naive ~= 0)
   and `test_frozen.py` (one pseudo-fold, cutoff enforced, walk-forward still
@@ -104,10 +108,10 @@ Celery (unscheduled): `backtesting.tasks.run_backtest_task(backtest_id)`,
   `strategies/backtesting/engine.py`).
 - Folds are chained sequentially; there is no walk-forward hyper-parameter
   search - each fold uses the model's stored `estimator_params`.
-- `frozen_artifact` trusts the artifact's `trained_at` as the out-of-sample
-  boundary; it does not re-derive the exact last label the pipeline saw. If
-  you train a model with an explicit past `train_end` but `trained_at` is
-  "now", use `walk_forward` or pin the run whose `trained_at` matches the
-  window you mean to evaluate.
+- `frozen_artifact` uses `min(trained_at, train_end)` from the artifact as the
+  out-of-sample boundary; it does not re-derive the exact last label the
+  pipeline saw. A model trained with `train_end=None` (through today) has no
+  hold-out left - set an explicit past `train_end` and retrain, or use
+  `walk_forward`.
 - The simulation steps on decision-bar closes; intraday fills, partial fills
   and borrow cost for shorts are out of scope.

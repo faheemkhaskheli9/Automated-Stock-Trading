@@ -8,6 +8,9 @@
     {% csrf_token %}
     {{ form.non_field_errors }}
     {% for field in form %}
+      {% if field.name == 'fit_mode' %}<h2 class="section">Fit mode</h2><p class="muted">Pick <strong>frozen_artifact</strong> to score a model you already trained in the modeling app; <strong>walk_forward</strong> retrains every fold and ignores the artifact.</p>{% endif %}
+      {% if field.name == 'scheme' %}<h2 class="section">Walk-forward fold windows</h2><p class="muted">Ignored in frozen-artifact mode.</p>{% endif %}
+      {% if field.name == 'long_threshold' %}<h2 class="section">Position rule &amp; costs</h2>{% endif %}
       <div class="field-row">
         {{ field.label_tag }}
         {{ field }}
