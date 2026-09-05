@@ -238,6 +238,42 @@ actual-value backfill.
 
 Usage and the full feature/target reference: `docs/MODELING.md`.
 
+## `backtesting` app (Phase 7, walk-forward evaluation)
+
+Walk-forward backtesting of a `modeling.TradingModel` - the repeated-retrain-
+through-time view the `modeling` app's single trailing holdout can't give,
+plus a forecast -> trade -> equity-curve translation. Routed at `/backtests/`
+(NOT `/backtesting/`, which is the in-progress `strategies` UI). Adds no new
+dependencies.
+
+- `models.py`: `Backtest` (config: which model, `scheme`
+  `expanding`/`rolling`, `train_span`/`test_span`/`step`/`gap` in *sessions
+  with data*, `long_threshold`/`allow_short` position rule, cost bps, cash;
+  `clean()` rejects targets other than `horizon_close`/`horizon_return`/
+  `direction`), `BacktestRun` (execution row, mirrors
+  `modeling.ModelTrainingRun` - never-raises, records `status`/`error`),
+  `BacktestFold`, `BacktestPrediction` (pooled OOS predicted-vs-actual),
+  `BacktestTrade`.
+- `walkforward.py`: pure `generate_folds()` - marches `(train, test)` windows
+  forward, asserts `train_end < test_start` with a `gap` embargo every fold.
+- `engine.py` (`run_backtest`): reuses `modeling.dataset.build_dataset`
+  (point-in-time X/y/anchor/available_at), `modeling.training.build_pipeline`
+  (fresh pipeline per fold), `modeling.metrics.*` (accuracy) and
+  `strategies.backtesting.engine.BacktestResult` (CAGR/drawdown/Sharpe/win
+  rate). Per fold it drops any training row whose label wasn't observable
+  before that fold's first test decision. Persists everything; failures land
+  on the run.
+- `metrics.py`: `positions_from_forecast` + per-instrument
+  `simulate_instrument` (all-in/all-out, cost on every position change) +
+  `combine_equity_curves` (equal cash split, forward-filled union).
+- `services.py` (deferred-import wrapper), `tasks.py` (`run_backtest_task`,
+  `run_active_backtests` - unscheduled), `management/commands/backtest_model.py`,
+  `admin.py` (all 5 models), UI under `/backtests/` (FBVs extending
+  `marketdata/base.html`).
+
+Usage, leakage guarantees and v1 limitations: `docs/BACKTESTING.md`. This
+covers the intent of `docs/TASKS.md` Phase C for the `modeling` studio path.
+
 ## Deployment
 
 See `docs/DEPLOYMENT.md` for the full picture (two scheduling shapes, open cloud-provider

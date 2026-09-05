@@ -1,0 +1,13 @@
+/* Supplements marketdata/dashboard.css - only what the backtesting pages add. */
+.bt-form .field-row{margin-bottom:16px}
+.bt-form label{margin-bottom:6px;display:block}
+.bt-form textarea,.bt-form select,.bt-form input{width:100%;padding:10px 12px;border:1px solid #d4ded7;border-radius:7px;font:inherit;background:#fcfdfc;color:#264238}
+.bt-form input[type=checkbox]{width:auto}
+.field-row{margin-bottom:14px}
+.field-row .errorlist{color:#a3422d;font-size:12px;margin:6px 0 0}
+pre.spec{background:#f3f7f4;border:1px solid #e2eae4;border-radius:8px;padding:14px;font-size:12px;overflow:auto;white-space:pre-wrap}
+.intro .secondary,.intro .primary{margin-left:6px}
+.metric-cards{display:flex;flex-wrap:wrap;gap:14px;padding:18px 20px}
+.metric-cards .card{flex:1 1 130px;background:#f3f7f4;border:1px solid #e2eae4;border-radius:8px;padding:12px 14px}
+.metric-cards .card .k{font-size:12px;color:#5c7166}
+.metric-cards .card .v{font-size:20px;font-weight:600;color:#264238}

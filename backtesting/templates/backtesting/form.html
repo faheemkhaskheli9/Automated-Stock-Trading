@@ -1,0 +1,21 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
+<main>
+  <div class="intro"><div><p class="eyebrow">BACKTESTING</p><h1>{% if instance %}Edit backtest{% else %}New backtest{% endif %}</h1><p class="muted">Fold windows are counted in trading sessions with data.</p></div><div><a class="secondary" href="{% url 'backtesting:index' %}">Back</a></div></div>
+  <form method="post" class="panel controls bt-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      <div class="field-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <button class="primary" type="submit">Save backtest</button>
+  </form>
+</main>
+{% endblock %}

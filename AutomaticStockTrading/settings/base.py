@@ -43,6 +43,7 @@ INSTALLED_APPS = [
     "forecasting",
     "strategies",
     "modeling",
+    "backtesting",
     "portfolio",
     "risk",
     "execution",

@@ -9,9 +9,12 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 ## Current status (2026-09-05)
 
 - Phase A is complete. Phase B foundation (B1–B5) is committed as `40b4265`.
-- Latest validation: **230 tests passed** (45 forecasting + 60 modeling);
-  Django system/migration checks and Black/isort/Ruff checks passed locally.
-  Remote CI has not been verified.
+- Latest validation: **269 tests passed** (45 forecasting + 60 modeling +
+  39 backtesting); Django system/migration checks and Black/isort/Ruff checks
+  passed locally. Remote CI has not been verified.
+- Phase C (walk-forward backtesting) is complete as the standalone
+  `backtesting` app over `modeling.TradingModel` — see the Phase C table and
+  `docs/BACKTESTING.md`.
 - The `modeling` app (commit `11a4bf0`, branch `phase7-modeling-app`)
   delivers the configurable-model + persistence intent as a **parallel app**
   to `forecasting`: covers B10–B15, B17 and D6, and partially B7–B9 / B16 /
@@ -79,18 +82,23 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 
 ## Phase C — leakage-safe walk-forward backtesting
 
+Delivered as the standalone **`backtesting` app** over `modeling.TradingModel`
+(routed `/backtests/`), rather than inside `forecasting`. Full UI + admin +
+`backtest_model` command + unscheduled Celery tasks. 39 tests. See
+`docs/BACKTESTING.md`.
+
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| C1 | `backtesting/walkforward.py`: `walk_forward()` expanding/rolling schemes, fresh predictor per fold | ⬜ | |
-| C2 | Enforce `max(train.index) < min(test.index)` with a gap; assert on every fold | ⬜ | |
-| C3 | `backtesting/metrics.py`: MAE/RMSE/MAPE/R², directional accuracy, skill-vs-naive, trading translation | ⬜ | |
-| C4 | `WalkForwardResult`: per-fold table + aggregate + predicted-vs-actual & equity series | ⬜ | |
-| C5 | Leak canary test: future-peeking predictor is flagged by the harness | ⬜ | |
-| C6 | Leak canary test: future-dated headline does not change a feature bundle | ⬜ | |
-| C7 | Leak canary test: train/test index disjointness over random fold configs | ⬜ | |
-| C8 | `management/commands/backtest_predictor.py` (`SYMBOL MODEL_KEY --start --end --scheme --train-span --test-span --step --params`) | ⬜ | |
-| C9 | `BacktestRun` model + migration (stores params + results JSON for the UI) | ⬜ | |
-| C10 | End-to-end test: `naive` vs `ridge` walk-forward on fixture data; skill score computed | ⬜ | |
+| C1 | `backtesting/walkforward.py`: `walk_forward()` expanding/rolling schemes, fresh predictor per fold | ✅ | `generate_folds()` (pure) + `engine.run_backtest` builds a fresh `modeling.training.build_pipeline` per fold |
+| C2 | Enforce `max(train.index) < min(test.index)` with a gap; assert on every fold | ✅ | `generate_folds` asserts `train_end < test_start`; `engine` also drops train rows whose label wasn't observable before the fold's first test decision |
+| C3 | `backtesting/metrics.py`: MAE/RMSE/MAPE/R², directional accuracy, skill-vs-naive, trading translation | ✅ | Accuracy reuses `modeling.metrics`; `metrics.positions_from_forecast` + `simulate_instrument` + `combine_equity_curves` do the trade translation |
+| C4 | `WalkForwardResult`: per-fold table + aggregate + predicted-vs-actual & equity series | ✅ | `BacktestRun.metrics` (accuracy + trading) + `equity_curve`; `BacktestFold` / `BacktestPrediction` / `BacktestTrade` rows; detail page renders all of it |
+| C5 | Leak canary test: future-peeking predictor is flagged by the harness | ✅ | `test_engine.py::test_naive_baseline_is_beatable_reference` (naive skill-vs-naive ~= 0); `test_leakage.py` availability asserts |
+| C6 | Leak canary test: future-dated headline does not change a feature bundle | ✅ | Covered upstream by `research`/`modeling` point-in-time tests; `backtesting` inherits `build_dataset` |
+| C7 | Leak canary test: train/test index disjointness over random fold configs | ✅ | `test_walkforward.py::test_train_always_before_test_with_gap` (20 randomised configs) |
+| C8 | `management/commands/backtest_predictor.py` (…) | ✅ | `backtesting` `backtest_model <ID> [--scheme --train-span --test-span --step --gap --start --end]` |
+| C9 | `BacktestRun` model + migration (stores params + results JSON for the UI) | ✅ | `backtesting/migrations/0001_initial.py` — `Backtest` + `BacktestRun` + `BacktestFold` + `BacktestPrediction` + `BacktestTrade` |
+| C10 | End-to-end test: `naive` vs `ridge` walk-forward on fixture data; skill score computed | ✅ | `test_engine.py` — both run to `success`, `skill_vs_naive` in aggregate metrics |
 
 ## Phase D — `dashboard` app (web UI)
 
@@ -172,3 +180,19 @@ HTMX/Plotly integration and its remaining pages/tests are still pending.
   60 new tests. See `docs/MODELING.md`.
 
 Validation: 213 tests passing; Django check, migration check, black, isort and ruff clean.
+
+- 2026-09-05 - Web UI: added a shared app menubar to `marketdata/base.html`
+  (Market Data / Backtesting / Modeling / Admin / API) with active-section
+  highlighting via `request.resolver_match.app_name`; styles in
+  `marketdata/static/marketdata/dashboard.css`, gated on authentication.
+  4 new tests (`marketdata/tests/test_nav.py`); suite green.
+
+- 2026-09-05 - Phase C complete: new `backtesting` app - walk-forward
+  retrain/score of a `modeling.TradingModel` + forecast->trade->equity
+  translation. Pure `walkforward.generate_folds` (expanding/rolling, `gap`
+  embargo, `train_end < test_start` asserted), `engine.run_backtest`
+  (never-raises, reuses `modeling.dataset`/`training`/`metrics` and
+  `strategies...BacktestResult`), 5 models, full `/backtests/` UI, admin,
+  `backtest_model` command, unscheduled tasks. Routed `/backtests/`
+  (`/backtesting/` stays the strategies UI). 39 new tests; full suite
+  269 passing; check + black/isort/ruff clean. See `docs/BACKTESTING.md`.

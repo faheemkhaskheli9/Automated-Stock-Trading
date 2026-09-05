@@ -1,0 +1,35 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
+<main>
+  <div class="intro">
+    <div><p class="eyebrow">BACKTESTING</p><h1>Model backtests</h1><p class="muted">Walk-forward retrain &amp; score a trading model, then simulate the trades.</p></div>
+    <div><a class="primary" href="{% url 'backtesting:create' %}">New backtest</a></div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Name</th><th>Model</th><th>Scheme</th><th>Windows</th><th>Last run</th><th>Skill vs naive</th><th>CAGR</th><th>Active</th></tr></thead>
+      <tbody>
+      {% for b in backtests %}
+        {% with last=b.runs.first %}
+        <tr>
+          <td><a href="{% url 'backtesting:detail' b.pk %}">{{ b.name }}</a></td>
+          <td>{{ b.model.name }}</td>
+          <td>{{ b.get_scheme_display }}</td>
+          <td>{{ b.train_span }}/{{ b.test_span }}/{{ b.step }} (gap {{ b.gap }})</td>
+          <td>{% if last %}{{ last.started_at|date:"Y-m-d H:i" }} &middot; {{ last.status }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if last.metrics.accuracy.skill_vs_naive != None %}{{ last.metrics.accuracy.skill_vs_naive|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if last.metrics.trading.cagr != None %}{{ last.metrics.trading.cagr|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if b.is_active %}yes{% else %}no{% endif %}</td>
+        </tr>
+        {% endwith %}
+      {% empty %}
+        <tr><td colspan="8" class="empty">No backtests yet. <a href="{% url 'backtesting:create' %}">Create one</a>.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}
