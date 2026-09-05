@@ -1,9 +1,11 @@
 # Forecasting foundation
 
-Phase B tasks B1–B6 are implemented. The Django `forecasting` app registers
-`naive` (last observed close) and `drift` (mean training-period one-step
-price change). Both return `PricePrediction` objects with a target date,
-feature hash and model key. Neither creates orders or writes predictions.
+Phase B tasks B1–B7 are implemented. The Django `forecasting` app registers
+`naive` (last observed close), `drift` (mean training-period one-step price
+change), `sarima`/`ets` (univariate statistical), and `ridge`/`elasticnet`
+(regularised linear over the full feature frame). Every predictor returns
+`PricePrediction` objects with a target date, feature hash and model key.
+None create orders or write predictions.
 
 ## Try the baselines
 
@@ -72,10 +74,11 @@ The hashes identify assembled feature values, not full dataset versions.
 
 ## Next tasks
 
-Continue B7–B9 with statistical/ML predictors, then B10–B17 with configured
-models, forecast persistence, commands and daily tasks. B16 already has
-baseline coverage; the remaining predictors still need round-trip tests.
-Phase C adds walk-forward validation. See [TASKS.md](TASKS.md).
+Continue B8–B9 with the tree / optional-LSTM predictors, then B10–B17 with
+configured models, forecast persistence, commands and daily tasks. B16 has
+baseline, statistical and linear coverage; the tree/LSTM predictors still
+need round-trip tests. Phase C adds walk-forward validation. See
+[TASKS.md](TASKS.md).
 
 ## Statistical predictors (B6)
 
@@ -105,3 +108,34 @@ and confidence remain unset. Walk-forward fold creation remains Phase C.
 
 Implementation references: [SARIMAX](https://www.statsmodels.org/stable/generated/statsmodels.tsa.statespace.sarimax.SARIMAX.html)
 and [ETS smoothing with fixed parameters](https://www.statsmodels.org/stable/generated/statsmodels.tsa.exponential_smoothing.ets.ETSModel.smooth.html).
+
+## Linear predictors (B7)
+
+`get_predictor_class("ridge")()` / `get_predictor_class("elasticnet")()` are
+`BasePredictor` subclasses that use the **whole** assembled feature frame —
+price lags/returns plus any `research` bundles selected by `provider_keys` —
+not just the close. `RidgePredictor(alpha=1.0)` and
+`ElasticNetPredictor(alpha=0.1, l1_ratio=0.5)` are configurable.
+
+- The learning target is the next-session **simple return**
+  `y / price.close - 1`. Each forecast is rebuilt as
+  `price.close * (1 + predicted_return)`, so a near-zero prediction
+  reproduces the naive last-close baseline and predictions stay on a price
+  scale.
+- `fit()` builds an sklearn `Pipeline`: median `SimpleImputer`
+  (`keep_empty_features=True`, so an all-NaN indicator warmup column keeps
+  its slot) → `StandardScaler` → `Ridge` / `ElasticNet`. The imputer and
+  scaler are fit **only** on the supplied `TrainingFrame` — never across a
+  fold boundary, never on the full series. At least five training rows are
+  required.
+- The training feature-column list is pinned at `fit()`. `predict_series`
+  rejects a frame whose columns differ (assemble both frames with the same
+  `provider_keys`). It also rejects a `TrainingFrame`, a different
+  symbol/exchange, and any row whose decision timestamp precedes the last
+  training label's availability (`fitted_through`). A failed refit clears the
+  fitted pipeline.
+- Prediction is per-row and independent: unlike `sarima`/`ets` there is no
+  prefix replay, so `predict_series` accepts any batch of eligible rows in
+  order. Intervals and confidence stay `None` — these models do not estimate
+  calibrated uncertainty. A pathological predicted return below `-100%` makes
+  the reconstructed close non-positive and raises rather than being clipped.

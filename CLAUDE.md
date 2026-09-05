@@ -179,10 +179,11 @@ activate the venv first):
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.
 
-## Forecasting foundation (Phase 7, B1-B6 complete)
+## Forecasting foundation (Phase 7, B1-B7 complete)
 
 `research` supplies technical/news/fundamental/social features. The new
-`forecasting` app registers `naive` and `drift` predictors through
+`forecasting` app registers `naive`, `drift`, `sarima`, `ets`, `ridge` and
+`elasticnet` predictors through
 `apps.ready()`. `TrainingFrame` separates future labels and label-availability
 timestamps from `PredictionFrame` inputs. `assemble_training_frame` retains
 warmup history but only labels observable by its aware `end` timestamp.
@@ -195,7 +196,10 @@ training command or walk-forward evaluation is implemented yet.
 
 Usage and limitations: `docs/FORECASTING.md`. Keep `docs/TASKS.md` updated;
 B6 adds `sarima`/`ets` statistical predictors with training-only parameter fits and prefix replay.
-B7 (Ridge/ElasticNet) is next. See `docs/FORECASTING.md` for replay requirements.
+B7 (`forecasting/linear.py`) adds `ridge`/`elasticnet` over the full point-in-time feature frame:
+next-return target rebuilt to a close, imputer+scaler fit inside an sklearn `Pipeline`, feature
+schema pinned at fit, row-independent prediction (no prefix replay). B8 (`GradientBoostingPredictor`)
+is next. See `docs/FORECASTING.md`.
 
 ## `modeling` app (Phase 7, configurable-model studio)
 

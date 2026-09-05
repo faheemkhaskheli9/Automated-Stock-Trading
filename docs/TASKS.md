@@ -9,7 +9,7 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 ## Current status (2026-09-05)
 
 - Phase A is complete. Phase B foundation (B1–B5) is committed as `40b4265`.
-- Latest validation: **213 tests passed** (32 forecasting + 60 modeling);
+- Latest validation: **230 tests passed** (45 forecasting + 60 modeling);
   Django system/migration checks and Black/isort/Ruff checks passed locally.
   Remote CI has not been verified.
 - The `modeling` app (commit `11a4bf0`, branch `phase7-modeling-app`)
@@ -18,11 +18,14 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
   E2 / E3 (see the tables below). It uses sklearn `Pipeline` estimators + a
   single trailing holdout, **not** `forecasting.BasePredictor` prefix-replay
   or walk-forward.
-- **Next task for the strict `forecasting` path: B7 — Ridge/ElasticNet as
-  `BasePredictor` subclasses** (fitted only on supplied training history,
-  prefix replay, round-trip tests), then C-phase walk-forward.
-- B6 is complete. Walk-forward evaluation (Phase C) and the forecasting
-  dashboard's forecast panels (D4, D7, D8) remain pending.
+- **Next task for the strict `forecasting` path: B8 — `GradientBoostingPredictor`**
+  (`HistGradientBoostingRegressor`), reusing the `forecasting/linear.py`
+  fit/predict/guard contract and its round-trip tests, then B9 (optional LSTM)
+  and C-phase walk-forward.
+- B6 and B7 are complete (`forecasting/linear.py`: `ridge` / `elasticnet`,
+  full point-in-time feature frame, next-return target, scaler/imputer fit
+  inside the sklearn `Pipeline`). Walk-forward evaluation (Phase C) and the
+  forecasting dashboard's forecast panels (D4, D7, D8) remain pending.
 - The PSX data viewer is complete: authenticated browsing, fetch-and-save, date
   filters, closing-price chart and CSV export in `marketdata`. Its 25 market-data
   tests pass; live PSX connectivity and remote CI have not been verified.
@@ -62,7 +65,7 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | B4 | `features.py`: `assemble_training_frame()` — lag/return features + `research` bundle as-of each bar; target = next close | ✅ | Completed-day availability; aligned next-observed labels; cutoff feature hashes; no future labels in inputs |
 | B5 | `naive.py`: `NaiveClosePredictor`, `DriftPredictor` (baselines) | ✅ | `naive` / `drift`; drift rejects inference before fitted labels are available |
 | B6 | `stats.py`: `SarimaPredictor`, `EtsPredictor` (`statsmodels`), refit per fold | ✅ | Training-only fits, prefix replay and cutoff guards; 11 new tests; fold orchestration remains C1 |
-| B7 | `linear.py`: `RidgePredictor` / `ElasticNetPredictor`, sklearn `Pipeline`, scaler fit inside `fit()` | 🟡 | `modeling` app ships `ridge`/`elasticnet` as sklearn-`Pipeline` estimators; native `forecasting.BasePredictor` subclasses with prefix-replay still ⬜ |
+| B7 | `linear.py`: `RidgePredictor` / `ElasticNetPredictor`, sklearn `Pipeline`, scaler fit inside `fit()` | ✅ | `forecasting/linear.py` — `ridge` / `elasticnet` `BasePredictor` subclasses over the full point-in-time feature frame; next-return target rebuilt to a close; imputer+scaler fit inside the `Pipeline`; feature schema pinned at fit; instrument + label-boundary guards mirror `drift`; 8 round-trip/guard tests |
 | B8 | `trees.py`: `GradientBoostingPredictor` (`HistGradientBoostingRegressor`) | 🟡 | `modeling` ships `gradient_boosting`/`hist_gbr` estimators; `forecasting.BasePredictor` version still ⬜ |
 | B9 | `deep.py`: `LstmPredictor` (PyTorch), guarded soft import, registration skipped if extra absent | 🟡 | `modeling/deep.py` `lstm` — torch soft-imported, registers `available=False` when absent; `forecasting` version still ⬜ |
 | B10 | `PredictionModel` model (`key`/`params`/`instruments`/`artifact_path`/`metrics`/`is_active`, `clean()` validates key) + migration | ✅ | Delivered as `modeling.TradingModel` (+`ModelTrainingRun`), superset; `clean()` validates estimator key + feature/target specs |
@@ -71,7 +74,7 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | B13 | `management/commands/predict_price.py` (`SYMBOL MODEL_KEY --as-of --params`) | ✅ | `modeling` `predict_model <ID> <SYMBOL> --as-of [--target-date]` |
 | B14 | `management/commands/train_predictor.py` (`MODEL_ID --start --end`) → `artifact_path` | ✅ | `modeling` `train_model <ID> [--start --end]` → joblib artifact under `MODEL_ARTIFACT_DIR` |
 | B15 | `forecasting.tasks.run_daily_predictions` Celery task (unscheduled) | ✅ | `modeling.tasks.run_model_predictions` (+ `train_model_task`, `backfill_prediction_actuals`), unscheduled |
-| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | 🟡 | `forecasting` baseline+statistical coverage done (32 tests); `modeling` has 60 tests (every estimator fits+predicts); `forecasting` ML-predictor coverage still pending |
+| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | 🟡 | `forecasting` baseline + statistical + linear coverage done (45 tests); `modeling` has 60 tests (every estimator fits+predicts); `forecasting` tree/LSTM predictor coverage still pending |
 | B17 | `forecasting` admin registrations | ✅ | `modeling/admin.py` registers `TradingModel`/`ModelTrainingRun`/`ModelPrediction`; `forecasting` still has no models to register |
 
 ## Phase C — leakage-safe walk-forward backtesting
@@ -142,6 +145,17 @@ HTMX/Plotly integration and its remaining pages/tests are still pending.
   testing/documentation statuses, and identified B6 as the next task.
 
 - 2026-09-05 - B6 complete: SARIMA/ETS predictors, statsmodels dependency, replay and leakage-boundary tests. Next: B7 (Ridge/ElasticNet).
+
+- 2026-09-05 - B7 complete: `forecasting/linear.py` adds `ridge` / `elasticnet`
+  `BasePredictor` subclasses. They consume the full point-in-time feature frame
+  (price lags/returns + research bundles), fit an sklearn `Pipeline`
+  (median `SimpleImputer(keep_empty_features=True)` -> `StandardScaler` ->
+  `Ridge`/`ElasticNet`) on a next-session simple-return target, and rebuild the
+  forecast as `close * (1 + predicted_return)` so a zero signal reproduces the
+  naive baseline. Feature schema is pinned at fit; instrument and label-boundary
+  guards mirror `drift`; failed refits clear state. 8 new round-trip/guard tests
+  (17 parametrised cases). Full suite 230 passing; Django + migration checks,
+  black, isort, ruff clean. Next: B8 (`GradientBoostingPredictor`).
 
 - 2026-09-05 - New `modeling` app added (separate from the strict `forecasting`
   path): a UI-driven studio where an operator configures an estimator + a
