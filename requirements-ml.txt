@@ -1,11 +1,11 @@
-# Optional heavy ML extras for the `modeling` app.
+# Optional heavy ML extras for the LSTM models.
 #
-# Only the `lstm` estimator (modeling/deep.py) needs these. It soft-imports
-# torch and skips its own registration when torch is absent, so the app,
-# its migrations and the rest of the test suite all run fine on the base
-# `requirements.txt` alone. Install this file only where you actually want
-# the LSTM estimator available (and note the extra image size / build time
-# in docs/DEPLOYMENT.md).
+# Only the `lstm` estimator (modeling/deep.py) and the `lstm` predictor
+# (forecasting/deep.py) need these. Both soft-import torch and skip their own
+# registration when torch is absent, so the apps, their migrations and the
+# rest of the test suite all run fine on the base `requirements.txt` alone.
+# Install this file only where you actually want the LSTM models available
+# (and note the extra image size / build time in docs/DEPLOYMENT.md).
 
 -r requirements.txt
 

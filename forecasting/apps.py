@@ -6,4 +6,4 @@ class ForecastingConfig(AppConfig):
     name = "forecasting"
 
     def ready(self):
-        from . import linear, naive, stats, trees  # noqa: F401
+        from . import deep, linear, naive, stats, trees  # noqa: F401

@@ -6,13 +6,13 @@ change.
 
 Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked · ⏭️ Deferred
 
-## Current status (2026-09-05)
+## Current status (2026-09-06)
 
 - Phase A is complete. Phase B foundation (B1–B5) is committed as `40b4265`.
-- Latest validation: **`forecasting` suite 53 passed** (45 + 8 new B8 tree
-  tests); Django check and Black/isort/Ruff clean for `forecasting`. Full
-  suite **282 passed** after the `backtesting` `frozen_artifact` work below;
-  `backtesting` black/isort/ruff clean. Remote CI has not been verified.
+- Latest validation: **`forecasting` suite 54 passed, 6 skipped** (the skips
+  are B9's `test_deep.py::TestWithTorch`, which needs the optional `torch`
+  extra); Django check and Black/isort/Ruff clean for `forecasting`. Full
+  suite **283 passed, 6 skipped** after B9. Remote CI has not been verified.
 - Phase C (walk-forward backtesting) is complete as the standalone
   `backtesting` app over `modeling.TradingModel` — see the Phase C table and
   `docs/BACKTESTING.md`. `Backtest.fit_mode` now also offers
@@ -25,10 +25,13 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
   E2 / E3 (see the tables below). It uses sklearn `Pipeline` estimators + a
   single trailing holdout, **not** `forecasting.BasePredictor` prefix-replay
   or walk-forward.
-- **Next task for the strict `forecasting` path: B9 — optional PyTorch
-  `LstmPredictor`** (guarded soft import, registration skipped if the extra is
-  absent), then C-phase walk-forward for the `forecasting` predictors.
-- B6, B7 and B8 are complete. B7 (`forecasting/linear.py`) and B8
+- **Next task for the strict `forecasting` path: C-phase walk-forward for the
+  `forecasting` predictors** (the current `backtesting` app is over
+  `modeling.TradingModel`, not `forecasting.BasePredictor`).
+- B6, B7, B8 and B9 are complete. B9 (`forecasting/deep.py`) adds the optional
+  `lstm` predictor: a `FrameModelPredictor` subclass (median imputer →
+  sklearn-wrapped `nn.LSTM`) that soft-imports `torch` and registers nothing
+  when the extra is absent. B7 (`forecasting/linear.py`) and B8
   (`forecasting/trees.py`) share one fit/predict/leakage-guard base
   (`forecasting/_frame_model.py::FrameModelPredictor`): full point-in-time
   feature frame, next-return target, pinned feature schema. Linear adds an
@@ -77,14 +80,14 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | B6 | `stats.py`: `SarimaPredictor`, `EtsPredictor` (`statsmodels`), refit per fold | ✅ | Training-only fits, prefix replay and cutoff guards; 11 new tests; fold orchestration remains C1 |
 | B7 | `linear.py`: `RidgePredictor` / `ElasticNetPredictor`, sklearn `Pipeline`, scaler fit inside `fit()` | ✅ | `forecasting/linear.py` — `ridge` / `elasticnet` `BasePredictor` subclasses over the full point-in-time feature frame; next-return target rebuilt to a close; imputer+scaler fit inside the `Pipeline`; feature schema pinned at fit; instrument + label-boundary guards mirror `drift`; 8 round-trip/guard tests |
 | B8 | `trees.py`: `GradientBoostingPredictor` (`HistGradientBoostingRegressor`) | ✅ | `forecasting/trees.py` — `gradient_boosting` `BasePredictor` over the full point-in-time feature frame, sharing `_frame_model.FrameModelPredictor` with `linear.py` (no imputer/scaler stage; HGB handles NaNs natively). 8 round-trip/guard tests mirroring `test_linear.py` |
-| B9 | `deep.py`: `LstmPredictor` (PyTorch), guarded soft import, registration skipped if extra absent | 🟡 | `modeling/deep.py` `lstm` — torch soft-imported, registers `available=False` when absent; `forecasting` version still ⬜ |
+| B9 | `deep.py`: `LstmPredictor` (PyTorch), guarded soft import, registration skipped if extra absent | ✅ | `forecasting/deep.py` — `lstm` `FrameModelPredictor` subclass (median imputer → sklearn-wrapped `nn.LSTM` over the last `lookback` rows). torch soft-imported; when absent the module imports, `LSTM_AVAILABLE=False`, and nothing registers (`get_predictor_class("lstm")` raises). Shares B7/B8 target/reconstruction/guards. `test_deep.py`: 1 unconditional registration test + a torch-gated round-trip/guard class (6 skipped without the extra). Also `modeling/deep.py` `lstm` estimator (registers `available=False` when absent) |
 | B10 | `PredictionModel` model (`key`/`params`/`instruments`/`artifact_path`/`metrics`/`is_active`, `clean()` validates key) + migration | ✅ | Delivered as `modeling.TradingModel` (+`ModelTrainingRun`), superset; `clean()` validates estimator key + feature/target specs |
 | B11 | `Prediction` model (audit row, `actual_close` nullable, unique `(model, instrument, target_date)`) + migration | ✅ | Delivered as `modeling.ModelPrediction` — same shape (`actual_value`/`abs_error` nullable, unique `(model, instrument, target_date)`) |
 | B12 | `services.make_prediction()` (only writer of `Prediction`) + `backfill_actuals()` | ✅ | `modeling.prediction.predict` (sole `ModelPrediction` writer) + `backfill_actuals()` |
 | B13 | `management/commands/predict_price.py` (`SYMBOL MODEL_KEY --as-of --params`) | ✅ | `modeling` `predict_model <ID> <SYMBOL> --as-of [--target-date]` |
 | B14 | `management/commands/train_predictor.py` (`MODEL_ID --start --end`) → `artifact_path` | ✅ | `modeling` `train_model <ID> [--start --end]` → joblib artifact under `MODEL_ARTIFACT_DIR` |
 | B15 | `forecasting.tasks.run_daily_predictions` Celery task (unscheduled) | ✅ | `modeling.tasks.run_model_predictions` (+ `train_model_task`, `backfill_prediction_actuals`), unscheduled |
-| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | 🟡 | `forecasting` baseline + statistical + linear + tree coverage done (53 tests); `modeling` has 60 tests (every estimator fits+predicts); `forecasting` optional-LSTM predictor coverage still pending |
+| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | 🟡 | `forecasting` baseline + statistical + linear + tree coverage done (54 tests); LSTM round-trip/guard tests exist (`test_deep.py::TestWithTorch`) but run only where the `torch` extra is installed — skipped in this repo's env; `modeling` has 60 tests (every estimator fits+predicts) |
 | B17 | `forecasting` admin registrations | ✅ | `modeling/admin.py` registers `TradingModel`/`ModelTrainingRun`/`ModelPrediction`; `forecasting` still has no models to register |
 
 ## Phase C — leakage-safe walk-forward backtesting
@@ -221,6 +224,25 @@ Validation: 213 tests passing; Django check, migration check, black, isort and r
   `backtest_model` command, unscheduled tasks. Routed `/backtests/`
   (`/backtesting/` stays the strategies UI). 39 new tests; full suite
   269 passing; check + black/isort/ruff clean. See `docs/BACKTESTING.md`.
+
+- 2026-09-06 - B9 complete: `forecasting/deep.py` adds the optional `lstm`
+  predictor. `torch` is soft-imported from `requirements-ml.txt`; when it is
+  absent the module imports cleanly, `LSTM_AVAILABLE` is `False` and **nothing
+  registers** (`get_predictor_class("lstm")` raises) — no other part of the
+  app or suite depends on torch. When present, `LstmPredictor` is a
+  `FrameModelPredictor` subclass sharing the B7/B8 contract (next-return
+  target, `close * (1 + r)` reconstruction, pinned schema / instrument /
+  `fitted_through` guards, failed-refit clearing, unset intervals); its
+  pipeline is a median `SimpleImputer(keep_empty_features=True)` → a small
+  sklearn-wrapped `nn.LSTM` that standardises internally and reads the last
+  `lookback` feature rows (causal left-padding, no retained training tail —
+  documented). `apps.ready()` imports `deep`; `requirements-ml.txt` comment
+  now covers both LSTM models. `test_deep.py`: 1 unconditional
+  registration-tracks-torch test + a `torch`-gated round-trip/guard class
+  (6 skipped in this env). `forecasting` 54 passed / 6 skipped; full suite
+  283 passed / 6 skipped; black/isort/ruff + Django check clean. Informed by
+  the knowledge-base pattern `ml/configurable-model-training.md` (optional
+  heavy dep stays optional; registry over import paths).
 
 - 2026-09-06 - `backtesting` gains a `frozen_artifact` fit mode (C11):
   `Backtest.fit_mode` (`walk_forward` default) + optional `training_run` FK

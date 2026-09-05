@@ -1,12 +1,14 @@
 # Forecasting foundation
 
-Phase B tasks B1–B8 are implemented. The Django `forecasting` app registers
+Phase B tasks B1–B9 are implemented. The Django `forecasting` app registers
 `naive` (last observed close), `drift` (mean training-period one-step price
 change), `sarima`/`ets` (univariate statistical), `ridge`/`elasticnet`
-(regularised linear over the full feature frame), and `gradient_boosting`
-(histogram gradient-boosted trees over the same feature frame). Every predictor returns
-`PricePrediction` objects with a target date, feature hash and model key.
-None create orders or write predictions.
+(regularised linear over the full feature frame), `gradient_boosting`
+(histogram gradient-boosted trees over the same feature frame), and -- only
+when the optional `torch` extra is installed -- `lstm` (a PyTorch sequence
+model over the same frame). Every predictor returns `PricePrediction` objects
+with a target date, feature hash and model key. None create orders or write
+predictions.
 
 ## Try the baselines
 
@@ -75,11 +77,11 @@ The hashes identify assembled feature values, not full dataset versions.
 
 ## Next tasks
 
-B9 (optional PyTorch LSTM) is the remaining Phase B predictor, then B10–B17
-with configured models, forecast persistence, commands and daily tasks. B16
-has baseline, statistical, linear and tree coverage; the optional LSTM still
-needs round-trip tests. Phase C adds walk-forward validation. See
-[TASKS.md](TASKS.md).
+Phase B predictors are complete (B9's optional LSTM below). B10–B17
+(configured models, forecast persistence, commands, daily tasks) are
+delivered in the parallel `modeling` app; B16's LSTM round-trip tests run
+only where the `torch` extra is installed. Phase C adds walk-forward
+validation. See [TASKS.md](TASKS.md).
 
 ## Statistical predictors (B6)
 
@@ -158,3 +160,27 @@ estimator (no `SimpleImputer`, no `StandardScaler`). Configurable via
 min_samples_leaf=20, l2_regularization=0.0, random_state=0)`; `random_state`
 is pinned by default for reproducible fits. At least five training rows are
 required.
+
+## Optional LSTM predictor (B9)
+
+`lstm` is registered **only** when the optional `torch` extra is installed
+(`pip install -r requirements-ml.txt`). Without it `forecasting.deep` still
+imports cleanly, `forecasting.deep.LSTM_AVAILABLE` is `False`, and
+`get_predictor_class("lstm")` raises — nothing else in the app or test suite
+depends on torch.
+
+`LstmPredictor(lookback=20, hidden_size=32, layers=1, epochs=60, lr=1e-3,
+random_state=0)` shares the same `FrameModelPredictor` contract as B7/B8:
+next-session simple-return target, `price.close * (1 + predicted_return)`
+reconstruction, pinned feature schema, instrument / `fitted_through` guards,
+failed-refit state clearing, unset intervals. The pipeline is a median
+`SimpleImputer` (`keep_empty_features=True`) → a small sklearn-wrapped
+`nn.LSTM` that standardises its inputs internally and predicts from the last
+`lookback` feature rows.
+
+Sequence caveat: the predictor keeps no training tail, so at inference the
+first `lookback - 1` rows of a frame are left-padded with a copy of that
+frame's first row rather than real prior history — a single-row `predict_next`
+call degenerates to a window of copies. Forecasts stay causal (row `i` uses
+only rows `≤ i` in the frame). This mirrors `modeling.deep` and is adequate
+for a v1; walk-forward evaluation is Phase C.

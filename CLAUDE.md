@@ -179,12 +179,12 @@ activate the venv first):
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.
 
-## Forecasting foundation (Phase 7, B1-B7 complete)
+## Forecasting foundation (Phase 7, B1-B9 complete)
 
 `research` supplies technical/news/fundamental/social features. The new
 `forecasting` app registers `naive`, `drift`, `sarima`, `ets`, `ridge`,
 `elasticnet` and `gradient_boosting` predictors through
-`apps.ready()`. `TrainingFrame` separates future labels and label-availability
+`apps.ready()` (plus `lstm` when the optional `torch` extra is installed). `TrainingFrame` separates future labels and label-availability
 timestamps from `PredictionFrame` inputs. `assemble_training_frame` retains
 warmup history but only labels observable by its aware `end` timestamp.
 Daily bars and date-only fundamental releases become usable at the next local
@@ -201,7 +201,10 @@ next-return target rebuilt to a close, imputer+scaler fit inside an sklearn `Pip
 schema pinned at fit, row-independent prediction (no prefix replay). B8 (`forecasting/trees.py`)
 adds `gradient_boosting` (`HistGradientBoostingRegressor`) over the same frame; B7 and B8 share
 `forecasting/_frame_model.py::FrameModelPredictor` (the tree path skips the imputer/scaler stage
-since HGB handles NaNs natively). B9 (optional PyTorch `LstmPredictor`) is next. See
+since HGB handles NaNs natively). B9 (`forecasting/deep.py`) adds the optional `lstm` predictor -
+another `FrameModelPredictor` subclass (median imputer -> sklearn-wrapped `nn.LSTM` over the last
+`lookback` rows); `torch` is soft-imported from `requirements-ml.txt` and nothing registers when
+it is absent. Next: C-phase walk-forward over the `forecasting` predictors. See
 `docs/FORECASTING.md`.
 
 ## `modeling` app (Phase 7, configurable-model studio)
