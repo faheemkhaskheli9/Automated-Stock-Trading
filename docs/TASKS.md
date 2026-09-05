@@ -34,11 +34,11 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| B1 | Create `forecasting` app; register; `apps.ready()` imports predictor modules | ⬜ | |
-| B2 | `base.py`: `BasePredictor` ABC (`fit`/`predict_next`/`predict_series`) + `PricePrediction` dataclass | ⬜ | |
-| B3 | `registry.py`: `@register_predictor` / `get_predictor_class` / `registered_keys` | ⬜ | mirror `strategies/registry.py` |
-| B4 | `features.py`: `assemble_training_frame()` — lag/return features + `research` bundle as-of each bar; target = next close | ⬜ | point-in-time choke point |
-| B5 | `naive.py`: `NaiveClosePredictor`, `DriftPredictor` (baselines) | ⬜ | |
+| B1 | Create `forecasting` app; register; `apps.ready()` imports predictor modules | ✅ | `forecasting/apps.py`; registers baseline predictors at startup |
+| B2 | `base.py`: `BasePredictor` ABC (`fit`/`predict_next`/`predict_series`) + `PricePrediction` dataclass | ✅ | `BasePredictor`, `PricePrediction`, separate label-free `PredictionFrame` and `TrainingFrame` |
+| B3 | `registry.py`: `@register_predictor` / `get_predictor_class` / `registered_keys` | ✅ | Explicit registry with duplicate-key validation and informative lookup errors |
+| B4 | `features.py`: `assemble_training_frame()` — lag/return features + `research` bundle as-of each bar; target = next close | ✅ | Completed-day availability; aligned next-observed labels; cutoff feature hashes; no future labels in inputs |
+| B5 | `naive.py`: `NaiveClosePredictor`, `DriftPredictor` (baselines) | ✅ | `naive` / `drift`; drift rejects inference before fitted labels are available |
 | B6 | `stats.py`: `SarimaPredictor`, `EtsPredictor` (`statsmodels`), refit per fold | ⬜ | |
 | B7 | `linear.py`: `RidgePredictor` / `ElasticNetPredictor`, sklearn `Pipeline`, scaler fit inside `fit()` | ⬜ | |
 | B8 | `trees.py`: `GradientBoostingPredictor` (`HistGradientBoostingRegressor`) | ⬜ | |
@@ -49,7 +49,7 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 | B13 | `management/commands/predict_price.py` (`SYMBOL MODEL_KEY --as-of --params`) | ⬜ | |
 | B14 | `management/commands/train_predictor.py` (`MODEL_ID --start --end`) → `artifact_path` | ⬜ | |
 | B15 | `forecasting.tasks.run_daily_predictions` Celery task (unscheduled) | ⬜ | |
-| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | ⬜ | |
+| B16 | Predictor round-trip tests (`predict_series` length == input; each model fits + predicts) | ⬜ | Baseline coverage done (21 forecasting tests); remaining predictors pending |
 | B17 | `forecasting` admin registrations | ⬜ | |
 
 ## Phase C — leakage-safe walk-forward backtesting
@@ -104,3 +104,9 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
   registry, technical-indicator library, RSS news + VADER sentiment, fundamentals/social
   stubs behind the interface, `ResearchSnapshot` point-in-time cache, `sync_research`
   command, Celery tasks, admin, 12 tests (incl. leak canaries). Suite 100 → 112 green.
+
+- 2026-09-05 - Phase B foundation (B1-B5) complete: predictor registry,
+  label-separated frames, completed-day feature assembly, naive/drift baselines.
+  Date-only fundamentals now wait until the following day. 21 new tests; full
+  suite 133 passing; Django checks and migration checks clean. See
+  `docs/FORECASTING.md` for usage, timing assumptions and remaining limitations.

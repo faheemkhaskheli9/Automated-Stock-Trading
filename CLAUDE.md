@@ -179,6 +179,23 @@ activate the venv first):
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.
 
+## Forecasting foundation (Phase 7, B1-B5 complete)
+
+`research` supplies technical/news/fundamental/social features. The new
+`forecasting` app registers `naive` and `drift` predictors through
+`apps.ready()`. `TrainingFrame` separates future labels and label-availability
+timestamps from `PredictionFrame` inputs. `assemble_training_frame` retains
+warmup history but only labels observable by its aware `end` timestamp.
+Daily bars and date-only fundamental releases become usable at the next local
+midnight; this is conservative until precise availability timestamps exist.
+`predict_next` requires an explicit target session date, without guessing
+holidays or consulting future bars. Drift rejects inference before its latest
+training label was available. No forecast persistence, fitted artifacts,
+training command or walk-forward evaluation is implemented yet.
+
+Usage and limitations: `docs/FORECASTING.md`. Keep `docs/TASKS.md` updated;
+B6 (statistical predictors) is next. Full suite: 133 tests passing after B1-B5.
+
 ## Deployment
 
 See `docs/DEPLOYMENT.md` for the full picture (two scheduling shapes, open cloud-provider

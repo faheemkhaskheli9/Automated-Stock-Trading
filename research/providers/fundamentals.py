@@ -6,9 +6,12 @@ available through a free API, so for now `CompanyFundamental` rows are
 loaded manually or from CSV (see `load_fundamentals_csv`). Until rows
 exist, this provider returns an empty bundle - it never blocks assembly.
 
-Features (from the latest report with ``as_of_report_date <= as_of``):
+Features (from the latest report with ``as_of_report_date < as_of.date()``):
 one ``fundamentals.<ratio>`` per key in the stored ``ratios`` JSON, plus
 ``fundamentals.report_age_days``.
+
+Only a publication date is stored, not a release time. Conservatively
+make reports available the following day to avoid intraday look-ahead.
 """
 
 from __future__ import annotations
@@ -49,7 +52,7 @@ def fundamentals_features(
 ) -> dict[str, float]:
     report = (
         CompanyFundamental.objects.filter(
-            exchange=exchange, symbol=symbol, as_of_report_date__lte=as_of.date()
+            exchange=exchange, symbol=symbol, as_of_report_date__lt=as_of.date()
         )
         .order_by("-as_of_report_date")
         .first()
