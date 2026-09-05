@@ -15,6 +15,12 @@ django-celery-beat>=2.7,<3.0
 pandas>=2.2,<3.0
 joblib>=1.4,<2.0
 
+# Research app (Phase 7) - external-signal ingestion. Both are soft-imported
+# in research/providers/news.py: the app and its tests run without them, only
+# live RSS ingestion needs them.
+feedparser>=6.0,<7.0
+vaderSentiment>=3.3,<4.0
+
 # Alerting (webhook delivery)
 requests>=2.32,<3.0
 # psxdata has no stable release yet (alpha only) - pin exact version and allow

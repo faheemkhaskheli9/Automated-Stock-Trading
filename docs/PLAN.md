@@ -167,3 +167,29 @@ Each phase is independently shippable and testable before moving on.
   state; trigger an alert and confirm delivery.
 - Phase 5: `docker compose up` reproduces the full stack locally; a cloud
   deploy runs one full scheduled cycle end-to-end.
+
+---
+
+## Phase 7 — Next-day close forecasting (in progress)
+
+Added after the request for a price-prediction "agent". Full design in
+`docs/FORECASTING_PLAN.md`; live task list with status in `docs/TASKS.md`.
+
+Summary: three new apps —
+- `research` — pluggable `FeatureProvider` library (technical indicators
+  working, RSS news + VADER sentiment working, fundamentals/social stubbed
+  behind the interface), all **point-in-time correct**, cached as
+  `ResearchSnapshot`.
+- `forecasting` — `BasePredictor` framework + registry (mirrors
+  `strategies/`), multiple user-selectable predictors (naive/drift
+  baselines, SARIMA/ETS, Ridge/ElasticNet, gradient boosting, optional
+  PyTorch LSTM), `PredictionModel`/`Prediction` models, and a **walk-forward
+  backtester with enforced anti-leakage** (fresh model per fold, strict
+  train/test time ordering, point-in-time features, leak-canary tests,
+  skill-vs-naive scoring).
+- `dashboard` — Django + HTMX + Tailwind + Plotly web UI: instruments,
+  symbol detail (chart + indicators + forecast + news), predictor
+  catalogue, backtest runner, accuracy leaderboard.
+
+Market-agnostic by construction (keyed on `Instrument.exchange`); PSX is the
+only wired provider, others drop in later.
