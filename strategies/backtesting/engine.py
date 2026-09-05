@@ -27,10 +27,11 @@ class Trade:
     exit_time: datetime
     exit_price: float
     shares: int
+    fees: float = 0.0
 
     @property
     def pnl(self) -> float:
-        return (self.exit_price - self.entry_price) * self.shares
+        return (self.exit_price - self.entry_price) * self.shares - self.fees
 
 
 @dataclass
@@ -71,7 +72,7 @@ class BacktestResult:
     def max_drawdown(self) -> float:
         if not self.equity_curve:
             return 0.0
-        peak = self.equity_curve[0][1]
+        peak = self.initial_cash
         max_dd = 0.0
         for _, equity in self.equity_curve:
             peak = max(peak, equity)
@@ -98,8 +99,22 @@ class BacktestResult:
 
 
 def run_backtest(
-    strategy: BaseStrategy, bars: list[Bar], initial_cash: float = 100_000.0
+    strategy: BaseStrategy,
+    bars: list[Bar],
+    initial_cash: float = 100_000.0,
+    *,
+    next_open: bool = False,
+    commission_bps: float = 0,
+    slippage_bps: float = 0,
 ) -> BacktestResult:
+    if not math.isfinite(initial_cash) or initial_cash <= 0:
+        raise ValueError("Initial cash must be finite and positive.")
+    if any(not math.isfinite(v) or v < 0 or v >= 10_000 for v in (commission_bps, slippage_bps)):
+        raise ValueError("Costs must be between 0 and 9,999 basis points.")
+    if any(not math.isfinite(float(v)) or float(v) <= 0 for b in bars for v in (b.open, b.close)):
+        raise ValueError("Historical open and close prices must be finite and positive.")
+    if any(a.timestamp >= b.timestamp for a, b in zip(bars, bars[1:])):
+        raise ValueError("Historical bars must have unique, increasing timestamps.")
     if not bars:
         return BacktestResult(initial_cash=initial_cash, final_equity=initial_cash)
 
@@ -114,25 +129,36 @@ def run_backtest(
     shares = 0
     entry_price = None
     entry_time = None
+    entry_fee = 0.0
+    fee_rate = commission_bps / 10_000
+    slip = slippage_bps / 10_000
     trades: list[Trade] = []
     equity_curve: list[tuple[datetime, float]] = []
 
-    for bar, signal in zip(bars, signals):
-        if signal.action == Action.BUY and shares == 0 and cash > 0:
-            shares = int(cash // float(bar.close))
+    for i, bar in enumerate(bars):
+        signal = signals[i - 1] if next_open and i > 0 else signals[i]
+        action = Action.HOLD if next_open and i == 0 else signal.action
+        price = float(bar.open if next_open else bar.close)
+        if action == Action.BUY and shares == 0 and cash > 0:
+            fill = price * (1 + slip)
+            shares = int(cash // (fill * (1 + fee_rate)))
             if shares > 0:
-                cash -= shares * float(bar.close)
-                entry_price = float(bar.close)
+                entry_fee = shares * fill * fee_rate
+                cash -= shares * fill + entry_fee
+                entry_price = fill
                 entry_time = bar.timestamp
-        elif signal.action == Action.SELL and shares > 0:
-            cash += shares * float(bar.close)
+        elif action == Action.SELL and shares > 0:
+            fill = price * (1 - slip)
+            exit_fee = shares * fill * fee_rate
+            cash += shares * fill - exit_fee
             trades.append(
                 Trade(
                     entry_time=entry_time,
                     entry_price=entry_price,
                     exit_time=bar.timestamp,
-                    exit_price=float(bar.close),
+                    exit_price=fill,
                     shares=shares,
+                    fees=entry_fee + exit_fee,
                 )
             )
             shares = 0
