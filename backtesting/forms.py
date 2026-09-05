@@ -1,6 +1,6 @@
 from django import forms
 
-from modeling.models import TradingModel
+from modeling.models import ModelTrainingRun, TradingModel
 
 from .models import Backtest
 
@@ -10,6 +10,22 @@ class BacktestConfigForm(forms.Form):
     model = forms.ModelChoiceField(
         queryset=TradingModel.objects.all(),
         help_text="Only models with a horizon_close / horizon_return / direction target.",
+    )
+    fit_mode = forms.ChoiceField(
+        choices=Backtest.FitMode.choices,
+        initial=Backtest.FitMode.WALK_FORWARD,
+        required=False,
+        help_text=(
+            "walk_forward retrains every fold; frozen_artifact scores the model's already-"
+            "trained artifact over every session after it was trained."
+        ),
+    )
+    training_run = forms.ModelChoiceField(
+        queryset=ModelTrainingRun.objects.filter(
+            status=ModelTrainingRun.Status.SUCCESS
+        ).select_related("model"),
+        required=False,
+        help_text="frozen_artifact only: pin a training run's artifact. Blank = model's latest.",
     )
     scheme = forms.ChoiceField(choices=Backtest.Scheme.choices, initial=Backtest.Scheme.EXPANDING)
     train_span = forms.IntegerField(min_value=1, initial=250, label="Train span (sessions)")
@@ -33,6 +49,8 @@ class BacktestConfigForm(forms.Form):
             kwargs["initial"].update(
                 name=instance.name,
                 model=instance.model_id,
+                fit_mode=instance.fit_mode,
+                training_run=instance.training_run_id,
                 scheme=instance.scheme,
                 train_span=instance.train_span,
                 test_span=instance.test_span,
@@ -55,6 +73,8 @@ class BacktestConfigForm(forms.Form):
         for field in (
             "name",
             "model",
+            "fit_mode",
+            "training_run",
             "scheme",
             "train_span",
             "test_span",
@@ -78,6 +98,7 @@ class BacktestConfigForm(forms.Form):
         data = super().clean()
         if self.errors:
             return data
+        data["fit_mode"] = data.get("fit_mode") or Backtest.FitMode.WALK_FORWARD
         probe = self.instance or Backtest()
         for field, value in data.items():
             setattr(probe, field, value)

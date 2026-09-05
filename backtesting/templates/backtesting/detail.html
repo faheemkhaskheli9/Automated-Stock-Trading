@@ -4,7 +4,7 @@
 <link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
 <main>
   <div class="intro">
-    <div><p class="eyebrow">BACKTEST</p><h1>{{ backtest.name }}</h1><p class="muted">{{ backtest.model.name }} &middot; {{ backtest.get_scheme_display }} &middot; target: {{ backtest.target_type }}</p></div>
+    <div><p class="eyebrow">BACKTEST</p><h1>{{ backtest.name }}</h1><p class="muted">{{ backtest.model.name }} &middot; {{ backtest.get_fit_mode_display }} &middot; {{ backtest.get_scheme_display }} &middot; target: {{ backtest.target_type }}</p></div>
     <div>
       <a class="secondary" href="{% url 'backtesting:edit' backtest.pk %}">Edit</a>
       {% if latest %}<a class="secondary" href="?export=csv">Predictions CSV</a>{% endif %}
@@ -16,7 +16,8 @@
   <div class="panel controls">
     <h2>Configuration</h2>
     <p class="muted">Instruments: {% for i in backtest.model.instruments.all %}{{ i.symbol }}{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}</p>
-    <pre class="spec">scheme       = {{ backtest.scheme }}
+    <pre class="spec">fit_mode     = {{ backtest.fit_mode }}{% if backtest.fit_mode == 'frozen_artifact' %}   training_run = {{ backtest.training_run_id|default:"(model's latest artifact)" }}{% endif %}
+scheme       = {{ backtest.scheme }}{% if backtest.fit_mode == 'frozen_artifact' %}   (fold windows ignored){% endif %}
 train_span   = {{ backtest.train_span }}   test_span = {{ backtest.test_span }}   step = {{ backtest.step }}   gap = {{ backtest.gap }}
 date range   = {{ backtest.start|default:"(all)" }} &rarr; {{ backtest.end|default:"(all)" }}
 long_threshold = {{ backtest.long_threshold }}   allow_short = {{ backtest.allow_short }}

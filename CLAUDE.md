@@ -249,29 +249,39 @@ plus a forecast -> trade -> equity-curve translation. Routed at `/backtests/`
 (NOT `/backtesting/`, which is the in-progress `strategies` UI). Adds no new
 dependencies.
 
-- `models.py`: `Backtest` (config: which model, `scheme`
-  `expanding`/`rolling`, `train_span`/`test_span`/`step`/`gap` in *sessions
-  with data*, `long_threshold`/`allow_short` position rule, cost bps, cash;
+- `models.py`: `Backtest` (config: which model, `fit_mode`
+  `walk_forward`/`frozen_artifact`, optional `training_run` FK (pins an
+  artifact for `frozen_artifact`), `scheme` `expanding`/`rolling`,
+  `train_span`/`test_span`/`step`/`gap` in *sessions with data*,
+  `long_threshold`/`allow_short` position rule, cost bps, cash;
   `clean()` rejects targets other than `horizon_close`/`horizon_return`/
-  `direction`), `BacktestRun` (execution row, mirrors
+  `direction`, and requires a trained artifact when `fit_mode` is
+  `frozen_artifact`; `.artifact_path` resolves the pinned run's path or the
+  model's latest), `BacktestRun` (execution row, mirrors
   `modeling.ModelTrainingRun` - never-raises, records `status`/`error`),
   `BacktestFold`, `BacktestPrediction` (pooled OOS predicted-vs-actual),
   `BacktestTrade`.
 - `walkforward.py`: pure `generate_folds()` - marches `(train, test)` windows
   forward, asserts `train_end < test_start` with a `gap` embargo every fold.
 - `engine.py` (`run_backtest`): reuses `modeling.dataset.build_dataset`
-  (point-in-time X/y/anchor/available_at), `modeling.training.build_pipeline`
-  (fresh pipeline per fold), `modeling.metrics.*` (accuracy) and
+  (point-in-time X/y/anchor/available_at), `modeling.metrics.*` (accuracy) and
   `strategies.backtesting.engine.BacktestResult` (CAGR/drawdown/Sharpe/win
-  rate). Per fold it drops any training row whose label wasn't observable
-  before that fold's first test decision. Persists everything; failures land
-  on the run.
+  rate). `_execute` picks a scorer by `fit_mode`: `_score_walk_forward` fits a
+  fresh `modeling.training.build_pipeline` per fold and drops any training row
+  whose label wasn't observable before that fold's first test decision;
+  `_score_frozen` `joblib.load`s the model's stored artifact, checks
+  `feature_names`/`target_spec` still match, and scores every row dated
+  strictly after the artifact's `trained_at` as one pseudo-fold. Both feed the
+  same forecast->position->equity tail. Persists everything; failures land on
+  the run.
 - `metrics.py`: `positions_from_forecast` + per-instrument
   `simulate_instrument` (all-in/all-out, cost on every position change) +
   `combine_equity_curves` (equal cash split, forward-filled union).
 - `services.py` (deferred-import wrapper), `tasks.py` (`run_backtest_task`,
-  `run_active_backtests` - unscheduled), `management/commands/backtest_model.py`,
-  `admin.py` (all 5 models), UI under `/backtests/` (FBVs extending
+  `run_active_backtests` - unscheduled),
+  `management/commands/backtest_model.py` (`--fit-mode` / `--training-run`
+  plus the window flags override stored config for one run), `admin.py`
+  (all 5 models), UI under `/backtests/` (FBVs extending
   `marketdata/base.html`).
 
 Usage, leakage guarantees and v1 limitations: `docs/BACKTESTING.md`. This

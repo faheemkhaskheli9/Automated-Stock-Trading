@@ -11,9 +11,19 @@ from .models import (
 
 @admin.register(Backtest)
 class BacktestAdmin(admin.ModelAdmin):
-    list_display = ("name", "model", "scheme", "train_span", "test_span", "step", "is_active")
-    list_filter = ("scheme", "is_active", "model")
+    list_display = (
+        "name",
+        "model",
+        "fit_mode",
+        "scheme",
+        "train_span",
+        "test_span",
+        "step",
+        "is_active",
+    )
+    list_filter = ("fit_mode", "scheme", "is_active", "model")
     search_fields = ("name", "model__name")
+    raw_id_fields = ("training_run",)
     readonly_fields = ("created_at", "updated_at")
 
 

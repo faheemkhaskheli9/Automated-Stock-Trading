@@ -21,7 +21,7 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from marketdata.models import Instrument
-from modeling.models import TradingModel
+from modeling.models import ModelTrainingRun, TradingModel
 
 # Forecast targets this v1 can turn into a position. Multi-output
 # (``multistep``) and calendar-anchored (``weekday_anchored``) targets are
@@ -34,8 +34,33 @@ class Backtest(models.Model):
         EXPANDING = "expanding", "Expanding window"
         ROLLING = "rolling", "Rolling window"
 
+    class FitMode(models.TextChoices):
+        WALK_FORWARD = "walk_forward", "Walk-forward (retrain each fold)"
+        FROZEN_ARTIFACT = "frozen_artifact", "Frozen artifact (score a trained model)"
+
     name = models.CharField(max_length=255)
     model = models.ForeignKey(TradingModel, on_delete=models.CASCADE, related_name="backtests")
+    fit_mode = models.CharField(
+        max_length=16,
+        choices=FitMode.choices,
+        default=FitMode.WALK_FORWARD,
+        help_text=(
+            "walk_forward retrains a fresh pipeline every fold. frozen_artifact loads the "
+            "model's already-trained joblib artifact and scores every session after it was "
+            "trained - the fold windows below are ignored."
+        ),
+    )
+    training_run = models.ForeignKey(
+        ModelTrainingRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="backtests",
+        help_text=(
+            "frozen_artifact only: which training run's artifact to score. Leave blank to "
+            "use the model's latest artifact."
+        ),
+    )
     scheme = models.CharField(max_length=12, choices=Scheme.choices, default=Scheme.EXPANDING)
     train_span = models.PositiveIntegerField(
         default=250, help_text="Sessions of training history per fold (rolling: window size)."
@@ -96,12 +121,36 @@ class Backtest(models.Model):
                     f"This model's target is {ttype!r}; backtesting supports "
                     f"{SUPPORTED_TARGETS}."
                 )
+
+        if self.training_run_id and self.model_id:
+            if self.training_run.model_id != self.model_id:
+                errors["training_run"] = "That training run belongs to a different model."
+            elif self.training_run.status != ModelTrainingRun.Status.SUCCESS:
+                errors["training_run"] = "That training run did not finish successfully."
+            elif not self.training_run.artifact_path:
+                errors["training_run"] = "That training run has no saved artifact."
+
+        if self.fit_mode == self.FitMode.FROZEN_ARTIFACT and self.model_id:
+            if "training_run" not in errors and not self.artifact_path:
+                errors["fit_mode"] = (
+                    "Frozen-artifact mode needs a trained model: train it first, or pick a "
+                    "training run with a saved artifact."
+                )
+
         if errors:
             raise ValidationError(errors)
 
     @property
     def target_type(self) -> str:
         return (self.model.target_spec or {}).get("type", "")
+
+    @property
+    def artifact_path(self) -> str:
+        """The joblib artifact frozen-artifact mode should score: the pinned
+        ``training_run``'s, else the model's latest."""
+        if self.training_run_id and self.training_run.artifact_path:
+            return self.training_run.artifact_path
+        return self.model.artifact_path if self.model_id else ""
 
 
 class BacktestRun(models.Model):

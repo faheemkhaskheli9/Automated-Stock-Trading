@@ -10,13 +10,15 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 
 - Phase A is complete. Phase B foundation (B1–B5) is committed as `40b4265`.
 - Latest validation: **`forecasting` suite 53 passed** (45 + 8 new B8 tree
-  tests); Django check and Black/isort/Ruff clean for `forecasting`. NOTE:
-  `backtesting` has 6 failing tests + 2 errors on `main`/this branch from an
-  uncommitted `Backtest.fit_mode` column with no migration — pre-existing,
-  unrelated to B8. Remote CI has not been verified.
+  tests); Django check and Black/isort/Ruff clean for `forecasting`. Full
+  suite **282 passed** after the `backtesting` `frozen_artifact` work below;
+  `backtesting` black/isort/ruff clean. Remote CI has not been verified.
 - Phase C (walk-forward backtesting) is complete as the standalone
   `backtesting` app over `modeling.TradingModel` — see the Phase C table and
-  `docs/BACKTESTING.md`.
+  `docs/BACKTESTING.md`. `Backtest.fit_mode` now also offers
+  `frozen_artifact`: score a `modeling`-trained joblib artifact (latest or a
+  pinned `training_run`) over every session after it was trained, instead of
+  retraining per fold (migration `0002`, `test_frozen.py`).
 - The `modeling` app (commit `11a4bf0`, branch `phase7-modeling-app`)
   delivers the configurable-model + persistence intent as a **parallel app**
   to `forecasting`: covers B10–B15, B17 and D6, and partially B7–B9 / B16 /
@@ -89,8 +91,11 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 
 Delivered as the standalone **`backtesting` app** over `modeling.TradingModel`
 (routed `/backtests/`), rather than inside `forecasting`. Full UI + admin +
-`backtest_model` command + unscheduled Celery tasks. 39 tests. See
-`docs/BACKTESTING.md`.
+`backtest_model` command + unscheduled Celery tasks. 44 tests. See
+`docs/BACKTESTING.md`. A `Backtest` runs in one of two `fit_mode`s:
+`walk_forward` (retrain each fold, the original C-phase behaviour) or
+`frozen_artifact` (score a `modeling`-trained joblib artifact, latest or a
+pinned `training_run`, over every session after `trained_at`).
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
@@ -101,9 +106,10 @@ Delivered as the standalone **`backtesting` app** over `modeling.TradingModel`
 | C5 | Leak canary test: future-peeking predictor is flagged by the harness | ✅ | `test_engine.py::test_naive_baseline_is_beatable_reference` (naive skill-vs-naive ~= 0); `test_leakage.py` availability asserts |
 | C6 | Leak canary test: future-dated headline does not change a feature bundle | ✅ | Covered upstream by `research`/`modeling` point-in-time tests; `backtesting` inherits `build_dataset` |
 | C7 | Leak canary test: train/test index disjointness over random fold configs | ✅ | `test_walkforward.py::test_train_always_before_test_with_gap` (20 randomised configs) |
-| C8 | `management/commands/backtest_predictor.py` (…) | ✅ | `backtesting` `backtest_model <ID> [--scheme --train-span --test-span --step --gap --start --end]` |
-| C9 | `BacktestRun` model + migration (stores params + results JSON for the UI) | ✅ | `backtesting/migrations/0001_initial.py` — `Backtest` + `BacktestRun` + `BacktestFold` + `BacktestPrediction` + `BacktestTrade` |
+| C8 | `management/commands/backtest_predictor.py` (…) | ✅ | `backtesting` `backtest_model <ID> [--fit-mode --training-run --scheme --train-span --test-span --step --gap --start --end]` |
+| C9 | `BacktestRun` model + migration (stores params + results JSON for the UI) | ✅ | `backtesting/migrations/0001_initial.py` — `Backtest` + `BacktestRun` + `BacktestFold` + `BacktestPrediction` + `BacktestTrade`; `0002` adds `fit_mode` + `training_run` FK |
 | C10 | End-to-end test: `naive` vs `ridge` walk-forward on fixture data; skill score computed | ✅ | `test_engine.py` — both run to `success`, `skill_vs_naive` in aggregate metrics |
+| C11 | `frozen_artifact` fit mode: backtest a `modeling`-trained artifact without retraining | ✅ | `engine._score_frozen` — `joblib.load` latest/pinned artifact, feature/target-spec guard, score sessions strictly after `trained_at` as one pseudo-fold; `test_frozen.py` (5 tests) |
 
 ## Phase D — `dashboard` app (web UI)
 
@@ -215,3 +221,16 @@ Validation: 213 tests passing; Django check, migration check, black, isort and r
   `backtest_model` command, unscheduled tasks. Routed `/backtests/`
   (`/backtesting/` stays the strategies UI). 39 new tests; full suite
   269 passing; check + black/isort/ruff clean. See `docs/BACKTESTING.md`.
+
+- 2026-09-06 - `backtesting` gains a `frozen_artifact` fit mode (C11):
+  `Backtest.fit_mode` (`walk_forward` default) + optional `training_run` FK
+  (migration `0002`). `engine._execute` picks `_score_walk_forward` (the
+  existing per-fold retrain, refactored out) or `_score_frozen`, which
+  `joblib.load`s the model's stored artifact (latest or the pinned run),
+  asserts `feature_names`/`target_spec` still match, and scores every session
+  strictly after the artifact's `trained_at` local date as one pseudo-fold.
+  Shared forecast->position->equity tail unchanged. Form / admin /
+  `backtest_model --fit-mode --training-run` / detail page updated. 5 new
+  tests (`test_frozen.py`); full suite 282 passing; black/isort/ruff clean.
+  Informed by `ml/configurable-model-training.md` (artifact feature-name
+  guard, never-raise entry point).

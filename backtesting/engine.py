@@ -1,6 +1,12 @@
-"""Run a :class:`~backtesting.models.Backtest`: walk-forward retrain + score,
-then translate the pooled out-of-sample forecasts into a trade log and an
-equity curve.
+"""Run a :class:`~backtesting.models.Backtest`, then translate the pooled
+out-of-sample forecasts into a trade log and an equity curve.
+
+Two fit modes:
+* ``walk_forward`` (default) - retrain a fresh ``modeling.training`` pipeline
+  every fold and score that fold's test window.
+* ``frozen_artifact`` - load the model's already-trained joblib artifact
+  (the latest, or a pinned ``training_run``) and score every session strictly
+  after it was trained. One pseudo-fold; the fold-window config is ignored.
 
 Design mirrors ``modeling.training.train_model``: this function **never
 raises** - any failure is written to the :class:`BacktestRun` row
@@ -9,10 +15,13 @@ raises** - any failure is written to the :class:`BacktestRun` row
 Leakage control:
 * ``modeling.dataset.build_dataset`` already builds every feature point-in-
   time and keeps a row only once its label was observable.
-* Per fold we additionally drop any training row whose label
+* ``walk_forward``: per fold we additionally drop any training row whose label
   (``available_at``) was not known strictly before the fold's first test
   decision, and :func:`backtesting.walkforward.generate_folds` keeps the
   whole train block before the test block with a ``gap`` embargo.
+* ``frozen_artifact``: only sessions dated strictly after the artifact's
+  ``trained_at`` (local date) are scored - the artifact never trained on a
+  label observable that late.
 """
 
 from __future__ import annotations
@@ -20,7 +29,9 @@ from __future__ import annotations
 import logging
 from datetime import datetime, time
 
+import joblib
 import numpy as np
+import pandas as pd
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -58,23 +69,98 @@ def run_backtest(backtest, *, created_by=None) -> BacktestRun:
     return run
 
 
-def _execute(bt, run) -> None:
-    tz = settings.TIME_ZONE
-    model = bt.model
-    target_type = bt.target_type
+class _PredictionSink:
+    """Row-level predictions plus the pooled arrays both scoring modes fill -
+    keeps ``_score_frozen`` / ``_score_walk_forward`` signatures short."""
 
-    ds = build_dataset(model, start=bt.start, end=bt.end, for_training=True)
-    if getattr(ds, "multioutput", False):
-        raise ValueError("Multi-output targets are not backtestable in v1")
+    def __init__(self):
+        self.pred_rows: list[BacktestPrediction] = []
+        # per-instrument ordered (as_of_date, anchor_close, position)
+        self.series: dict[str, list[tuple]] = {}
+        self.pooled_true: list[float] = []
+        self.pooled_pred: list[float] = []
+        self.pooled_anchor: list[float] = []
 
-    decision_dates = _local_dates(ds.X.index, tz)
-    avail = ds.available_at
-    y_arr = np.asarray(ds.y, dtype=float).ravel()
-    anchor_arr = np.asarray(ds.anchor, dtype=float)
-    tdates = list(ds.target_dates)
-    inst_labels = np.asarray(ds.instrument_labels)
-    sym_map = {i.symbol: i for i in model.instruments.all()}
 
+def _positions_and_metrics(bt, target_type, is_clf, raw, t_true, t_anchor, proba_up):
+    positions = trade_mod.positions_from_forecast(
+        target_type,
+        raw,
+        t_anchor,
+        long_threshold=bt.long_threshold,
+        allow_short=bt.allow_short,
+        proba_up=proba_up,
+    )
+    if is_clf:
+        fold_metrics = classification_metrics(t_true, np.round(raw), y_proba=proba_up)
+    else:
+        fold_metrics = regression_metrics(t_true, raw, anchor=t_anchor)
+    return positions, fold_metrics
+
+
+def _record_predictions(
+    sink,
+    *,
+    run,
+    ds,
+    fold_index,
+    test_idx,
+    raw,
+    t_true,
+    t_anchor,
+    positions,
+    is_clf,
+    inst_labels,
+    sym_map,
+    tdates,
+    decision_dates,
+):
+    for k, row in enumerate(test_idx):
+        symbol = inst_labels[row]
+        pred_val = float(raw[k])
+        actual = float(t_true[k])
+        abs_err = (0.0 if round(pred_val) == actual else 1.0) if is_clf else abs(pred_val - actual)
+        as_of_dt = ds.X.index[row].to_pydatetime()
+        sink.pred_rows.append(
+            BacktestPrediction(
+                run=run,
+                instrument=sym_map[symbol],
+                fold_index=fold_index,
+                as_of=as_of_dt,
+                target_date=tdates[row],
+                predicted_value=pred_val,
+                actual_value=actual,
+                abs_error=abs_err,
+                position=int(positions[k]),
+            )
+        )
+        sink.series.setdefault(symbol, []).append(
+            (decision_dates[row], float(t_anchor[k]), int(positions[k]))
+        )
+    sink.pooled_true.extend(np.asarray(t_true).tolist())
+    sink.pooled_pred.extend(np.asarray(raw).tolist())
+    sink.pooled_anchor.extend(np.asarray(t_anchor).tolist())
+
+
+def _score_walk_forward(
+    *,
+    bt,
+    run,
+    model,
+    ds,
+    tz,
+    target_type,
+    is_clf,
+    decision_dates,
+    avail,
+    y_arr,
+    anchor_arr,
+    tdates,
+    inst_labels,
+    sym_map,
+    sink,
+    fold_rows,
+) -> int:
     sessions = sorted(set(decision_dates.tolist()))
     folds = generate_folds(
         sessions,
@@ -90,16 +176,7 @@ def _execute(bt, run) -> None:
             f"{bt.train_span}+{bt.gap}+{bt.test_span} fold. Import more data or shrink the spans."
         )
 
-    is_clf = ds.task == TASK_CLASSIFICATION
-    pooled_true: list[float] = []
-    pooled_pred: list[float] = []
-    pooled_anchor: list[float] = []
-    pred_rows: list[BacktestPrediction] = []
-    fold_rows: list[BacktestFold] = []
-    # per-instrument ordered (as_of_date, anchor_close, position)
-    series: dict[str, list[tuple]] = {}
     used_folds = 0
-
     for fold in folds:
         test_mask = (decision_dates >= fold.test_start) & (decision_dates <= fold.test_end)
         if not test_mask.any():
@@ -125,19 +202,9 @@ def _execute(bt, run) -> None:
 
         t_true = y_arr[test_idx]
         t_anchor = anchor_arr[test_idx]
-        positions = trade_mod.positions_from_forecast(
-            target_type,
-            raw,
-            t_anchor,
-            long_threshold=bt.long_threshold,
-            allow_short=bt.allow_short,
-            proba_up=proba_up,
+        positions, fold_metrics = _positions_and_metrics(
+            bt, target_type, is_clf, raw, t_true, t_anchor, proba_up
         )
-
-        if is_clf:
-            fold_metrics = classification_metrics(t_true, np.round(raw), y_proba=proba_up)
-        else:
-            fold_metrics = regression_metrics(t_true, raw, anchor=t_anchor)
 
         fold_rows.append(
             BacktestFold(
@@ -152,39 +219,169 @@ def _execute(bt, run) -> None:
                 metrics=fold_metrics,
             )
         )
-
-        for k, row in enumerate(test_idx):
-            symbol = inst_labels[row]
-            pred_val = float(raw[k])
-            actual = float(t_true[k])
-            abs_err = (
-                (0.0 if round(pred_val) == actual else 1.0) if is_clf else abs(pred_val - actual)
-            )
-            as_of_dt = ds.X.index[row].to_pydatetime()
-            pred_rows.append(
-                BacktestPrediction(
-                    run=run,
-                    instrument=sym_map[symbol],
-                    fold_index=fold.index,
-                    as_of=as_of_dt,
-                    target_date=tdates[row],
-                    predicted_value=pred_val,
-                    actual_value=actual,
-                    abs_error=abs_err,
-                    position=int(positions[k]),
-                )
-            )
-            series.setdefault(symbol, []).append(
-                (decision_dates[row], float(t_anchor[k]), int(positions[k]))
-            )
-
-        pooled_true.extend(t_true.tolist())
-        pooled_pred.extend(raw.tolist())
-        pooled_anchor.extend(t_anchor.tolist())
+        _record_predictions(
+            sink,
+            run=run,
+            ds=ds,
+            fold_index=fold.index,
+            test_idx=test_idx,
+            raw=raw,
+            t_true=t_true,
+            t_anchor=t_anchor,
+            positions=positions,
+            is_clf=is_clf,
+            inst_labels=inst_labels,
+            sym_map=sym_map,
+            tdates=tdates,
+            decision_dates=decision_dates,
+        )
         used_folds += 1
+
+    return used_folds
+
+
+def _score_frozen(
+    *,
+    bt,
+    run,
+    model,
+    ds,
+    tz,
+    target_type,
+    is_clf,
+    decision_dates,
+    avail,
+    y_arr,
+    anchor_arr,
+    tdates,
+    inst_labels,
+    sym_map,
+    sink,
+    fold_rows,
+) -> int:
+    # ``tz`` and ``avail`` are accepted for a uniform scorer signature;
+    # frozen mode gates on the artifact's trained-at date, not per-fold
+    # availability, and both scorers are called with the same kwargs.
+    artifact_path = bt.artifact_path
+    if not artifact_path:
+        raise ValueError(
+            "Frozen-artifact mode needs a trained model - train it first, or pin a "
+            "training run with a saved artifact"
+        )
+    payload = joblib.load(artifact_path)
+    if list(payload.get("feature_names") or []) != list(ds.feature_names):
+        raise ValueError(
+            "The model's feature spec changed since this artifact was trained - retrain it "
+            "or pin the matching training run"
+        )
+    if payload.get("target_spec") not in (None, model.target_spec):
+        raise ValueError(
+            "The model's target spec changed since this artifact was trained - retrain it"
+        )
+
+    trained_at = pd.Timestamp(payload["trained_at"])
+    if trained_at.tzinfo is None:
+        trained_at = trained_at.tz_localize("UTC")
+    trained_date = trained_at.tz_convert(tz).date()
+
+    test_mask = decision_dates > trained_date
+    n_test = int(test_mask.sum())
+    if n_test < MIN_TRAIN_ROWS:
+        raise ValueError(
+            f"Only {n_test} sessions of history after the artifact was trained "
+            f"({trained_date.isoformat()}) - not enough to score. Train the model on an "
+            "earlier window, or import more recent price data."
+        )
+    test_idx = np.flatnonzero(test_mask)
+
+    pipeline = payload["pipeline"]
+    raw = np.asarray(pipeline.predict(ds.X.iloc[test_idx]), dtype=float).ravel()
+    proba_up = None
+    if is_clf and hasattr(pipeline, "predict_proba"):
+        proba_up = np.asarray(pipeline.predict_proba(ds.X.iloc[test_idx]))[:, 1]
+
+    t_true = y_arr[test_idx]
+    t_anchor = anchor_arr[test_idx]
+    positions, fold_metrics = _positions_and_metrics(
+        bt, target_type, is_clf, raw, t_true, t_anchor, proba_up
+    )
+
+    test_dates = decision_dates[test_idx]
+    fold_rows.append(
+        BacktestFold(
+            run=run,
+            fold_index=0,
+            train_start=model.train_start or trained_date,
+            train_end=trained_date,
+            test_start=min(test_dates),
+            test_end=max(test_dates),
+            n_train=0,
+            n_test=n_test,
+            metrics=fold_metrics,
+        )
+    )
+    _record_predictions(
+        sink,
+        run=run,
+        ds=ds,
+        fold_index=0,
+        test_idx=test_idx,
+        raw=raw,
+        t_true=t_true,
+        t_anchor=t_anchor,
+        positions=positions,
+        is_clf=is_clf,
+        inst_labels=inst_labels,
+        sym_map=sym_map,
+        tdates=tdates,
+        decision_dates=decision_dates,
+    )
+    return 1
+
+
+def _execute(bt, run) -> None:
+    tz = settings.TIME_ZONE
+    model = bt.model
+    target_type = bt.target_type
+
+    ds = build_dataset(model, start=bt.start, end=bt.end, for_training=True)
+    if getattr(ds, "multioutput", False):
+        raise ValueError("Multi-output targets are not backtestable in v1")
+
+    decision_dates = _local_dates(ds.X.index, tz)
+    is_clf = ds.task == TASK_CLASSIFICATION
+    sym_map = {i.symbol: i for i in model.instruments.all()}
+
+    sink = _PredictionSink()
+    fold_rows: list[BacktestFold] = []
+    scorer = _score_frozen if bt.fit_mode == bt.FitMode.FROZEN_ARTIFACT else _score_walk_forward
+    used_folds = scorer(
+        bt=bt,
+        run=run,
+        model=model,
+        ds=ds,
+        tz=tz,
+        target_type=target_type,
+        is_clf=is_clf,
+        decision_dates=decision_dates,
+        avail=ds.available_at,
+        y_arr=np.asarray(ds.y, dtype=float).ravel(),
+        anchor_arr=np.asarray(ds.anchor, dtype=float),
+        tdates=list(ds.target_dates),
+        inst_labels=np.asarray(ds.instrument_labels),
+        sym_map=sym_map,
+        sink=sink,
+        fold_rows=fold_rows,
+    )
 
     if used_folds == 0:
         raise ValueError("No fold had both enough training rows and any test rows")
+
+    pooled_true = sink.pooled_true
+    pooled_pred = sink.pooled_pred
+    pooled_anchor = sink.pooled_anchor
+    pred_rows = sink.pred_rows
+    series = sink.series
 
     # ---- trade / equity simulation ------------------------------------
     n_inst = max(len(series), 1)
@@ -280,6 +477,7 @@ def _execute(bt, run) -> None:
             "accuracy": accuracy,
             "trading": trading,
             "scheme": bt.scheme,
+            "fit_mode": bt.fit_mode,
             "instruments": sorted(series),
         }
         run.equity_curve = equity_curve
