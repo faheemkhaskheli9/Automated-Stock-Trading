@@ -197,6 +197,43 @@ Usage and limitations: `docs/FORECASTING.md`. Keep `docs/TASKS.md` updated;
 B6 adds `sarima`/`ets` statistical predictors with training-only parameter fits and prefix replay.
 B7 (Ridge/ElasticNet) is next. See `docs/FORECASTING.md` for replay requirements.
 
+## `modeling` app (Phase 7, configurable-model studio)
+
+Separate from `forecasting` (which stays the leakage-strict next-day-close
+path). `modeling` is the UI-driven studio: a `TradingModel` row is an
+estimator key + `feature_spec` (JSON list) + `target_spec` (JSON dict) +
+instruments + train window; it trains to a joblib artifact under
+`settings.MODEL_ARTIFACT_DIR` (default `<repo>/artifacts/models/`,
+gitignored) and predicts into persisted `ModelPrediction` rows with
+actual-value backfill.
+
+- `estimators.py`/`deep.py`: `@register_estimator` registry (mirrors
+  `strategies/registry.py`), populated in `apps.ready()`. sklearn linear /
+  trees / `mlp` + trivial baselines (`naive_last`/`drift`/`seasonal_naive`,
+  which read an `ohlc` close-lag column); `lstm` needs the optional
+  `requirements-ml.txt` torch extra and is otherwise "unavailable".
+- `features.py`: point-in-time feature builder - `ohlc`/`return`/`technical`
+  (from `research`)/`research`/`strategy_signal` (a `strategies` `Strategy`
+  or key, mapped to {-1,0,1})/`manual_signal`/`calendar`. `validate_spec`
+  is Django-import-free so `TradingModel.clean()` stays cheap.
+- `targets.py`: `horizon_close`/`horizon_return`/`direction`/
+  `weekday_anchored` (Mon->Fri same week)/`multistep`. "Next local
+  midnight" label availability, same as `forecasting`. `predict` needs an
+  explicit `target_date` except for `weekday_anchored`.
+- `dataset.py`: pooled X/y across the model's instruments; trailing
+  time-ordered holdout (single split - **not** walk-forward); a row is kept
+  only if its label was observable by `train_end`.
+- `training.py` (`train_model`) never raises - records a `ModelTrainingRun`.
+  `prediction.py` (`predict`, `backfill_actuals`). `services.py` is the thin
+  wrapper used by views/commands/tasks.
+- Commands: `train_model`, `predict_model`, `backfill_actuals`. Tasks
+  (`tasks.py`, unscheduled): `train_model_task`, `run_model_predictions`,
+  `backfill_prediction_actuals`.
+- UI under `/modeling/` (FBVs, extends `marketdata/base.html`). Adds
+  `scikit-learn` to `requirements.txt`.
+
+Usage and the full feature/target reference: `docs/MODELING.md`.
+
 ## Deployment
 
 See `docs/DEPLOYMENT.md` for the full picture (two scheduling shapes, open cloud-provider

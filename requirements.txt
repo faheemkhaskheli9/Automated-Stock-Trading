@@ -15,6 +15,10 @@ django-celery-beat>=2.7,<3.0
 pandas>=2.2,<3.0
 joblib>=1.4,<2.0
 statsmodels>=0.14.6,<0.15
+# modeling app (Phase 7) - configurable trading-model training/prediction.
+# scikit-learn covers every estimator except the optional torch LSTM
+# (see requirements-ml.txt); numpy/scipy come in transitively.
+scikit-learn>=1.5,<2.0
 
 # Research app (Phase 7) - external-signal ingestion. Both are soft-imported
 # in research/providers/news.py: the app and its tests run without them, only

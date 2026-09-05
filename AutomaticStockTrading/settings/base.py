@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     "research",
     "forecasting",
     "strategies",
+    "modeling",
     "portfolio",
     "risk",
     "execution",
@@ -131,6 +132,12 @@ STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+# modeling app - where trained model artifacts (joblib dumps) are written.
+# Defaults to a gitignored dir under the repo for local dev; point it at a
+# mounted volume / object-storage FUSE path in a real deployment.
+MODEL_ARTIFACT_DIR = Path(env("MODEL_ARTIFACT_DIR", default=str(BASE_DIR / "artifacts" / "models")))
 
 
 # Django REST Framework

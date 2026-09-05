@@ -1,0 +1,11 @@
+/* Supplements marketdata/dashboard.css - only what the modeling pages add. */
+.model-form .field-row{margin-bottom:16px}
+.model-form label{margin-bottom:6px}
+.model-form textarea,.model-form select,.model-form input{width:100%;padding:10px 12px;border:1px solid #d4ded7;border-radius:7px;font:inherit;background:#fcfdfc;color:#264238}
+.model-form ul{list-style:none;padding:0;margin:0;display:flex;flex-wrap:wrap;gap:12px}
+.model-form ul li{display:flex;align-items:center;gap:6px}
+.model-form ul li input{width:auto}
+.field-row{margin-bottom:14px}
+.field-row .errorlist{color:#a3422d;font-size:12px;margin:6px 0 0}
+pre.spec{background:#f3f7f4;border:1px solid #e2eae4;border-radius:8px;padding:14px;font-size:12px;overflow:auto;white-space:pre-wrap}
+.intro .secondary,.intro .primary{margin-left:6px}

@@ -1,0 +1,75 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'modeling/modeling.css' %}">
+<main>
+  <div class="intro">
+    <div><p class="eyebrow">MODEL</p><h1>{{ model.name }}</h1><p class="muted">{{ model.estimator_key }} &middot; {{ model.task }} &middot; target: {{ model.target_spec.type }}</p></div>
+    <div>
+      <a class="secondary" href="{% url 'modeling:edit' model.pk %}">Edit</a>
+      <a class="secondary" href="{% url 'modeling:predict' model.pk %}">Predict</a>
+      <a class="secondary" href="?export=csv">Predictions CSV</a>
+      <form method="post" style="display:inline"><input type="hidden" name="action" value="train">{% csrf_token %}<button class="primary" type="submit">Train now</button></form>
+    </div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="panel controls">
+    <h2>Configuration</h2>
+    <p class="muted">Instruments: {% for i in model.instruments.all %}{{ i.symbol }}{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}</p>
+    <p class="muted">Train window: {{ model.train_start|default:"(all)" }} &rarr; {{ model.train_end|default:"(all)" }} &middot; holdout {{ model.holdout_fraction }}</p>
+    <pre class="spec">feature_spec = {{ model.feature_spec }}
+target_spec  = {{ model.target_spec }}
+estimator_params = {{ model.estimator_params }}</pre>
+  </div>
+
+  {% with train=model.metrics.train holdout=model.metrics.holdout %}
+  {% if holdout %}
+  <div class="panel table-scroll">
+    <h2 style="padding:18px 20px 0">Metrics</h2>
+    <table>
+      <thead><tr><th>Split</th><th>n</th><th>MAE</th><th>RMSE</th><th>MAPE</th><th>R2</th><th>Dir. acc</th><th>Skill vs naive</th><th>Accuracy</th><th>F1</th><th>ROC AUC</th></tr></thead>
+      <tbody>
+      {% for label, s in model.metrics.items %}{% if label == 'train' or label == 'holdout' %}
+        <tr><td>{{ label }}</td><td>{{ s.n|default:"&mdash;" }}</td><td>{{ s.mae|floatformat:4|default:"&mdash;" }}</td><td>{{ s.rmse|floatformat:4|default:"&mdash;" }}</td><td>{{ s.mape|floatformat:2|default:"&mdash;" }}</td><td>{{ s.r2|floatformat:3|default:"&mdash;" }}</td><td>{{ s.directional_accuracy|floatformat:3|default:"&mdash;" }}</td><td>{{ s.skill_vs_naive|floatformat:3|default:"&mdash;" }}</td><td>{{ s.accuracy|floatformat:3|default:"&mdash;" }}</td><td>{{ s.f1|floatformat:3|default:"&mdash;" }}</td><td>{{ s.roc_auc|floatformat:3|default:"&mdash;" }}</td></tr>
+      {% endif %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endwith %}
+
+  {% if points %}
+  <div class="panel chart">
+    <h2 style="padding:18px 20px 0">Predicted vs actual ({{ scored_count }} scored{% if rolling_mae %}, MAE {{ rolling_mae|floatformat:3 }}{% endif %})</h2>
+    <svg viewBox="0 0 1000 240" preserveAspectRatio="none" style="width:100%;height:240px">
+      <polyline fill="none" stroke="#137c5b" stroke-width="2" points="{{ points.actual }}"/>
+      <polyline fill="none" stroke="#c07a1e" stroke-width="2" stroke-dasharray="5 4" points="{{ points.predicted }}"/>
+    </svg>
+    <p class="muted" style="padding:0 20px 16px">Green = actual, dashed amber = predicted.</p>
+  </div>
+  {% endif %}
+
+  <div class="panel table-scroll">
+    <h2 style="padding:18px 20px 0">Training runs</h2>
+    <table>
+      <thead><tr><th>#</th><th>Status</th><th>Started</th><th>Rows</th><th>Features</th><th>Error</th></tr></thead>
+      <tbody>
+      {% for r in runs %}<tr><td>{{ r.pk }}</td><td>{{ r.status }}</td><td>{{ r.started_at|date:"Y-m-d H:i" }}</td><td>{{ r.rows|default:"&mdash;" }}</td><td>{{ r.feature_count|default:"&mdash;" }}</td><td>{{ r.error|truncatechars:80 }}</td></tr>
+      {% empty %}<tr><td colspan="6" class="empty">Not trained yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel table-scroll">
+    <h2 style="padding:18px 20px 0">Recent predictions</h2>
+    <table>
+      <thead><tr><th>Instrument</th><th>As of</th><th>Target date</th><th>Predicted</th><th>Actual</th><th>Abs error</th></tr></thead>
+      <tbody>
+      {% for p in predictions %}<tr><td>{{ p.instrument.symbol }}</td><td>{{ p.as_of|date:"Y-m-d" }}</td><td>{{ p.target_date }}</td><td>{{ p.predicted_value|floatformat:4 }}</td><td>{{ p.actual_value|floatformat:4|default:"&mdash;" }}</td><td>{{ p.abs_error|floatformat:4|default:"&mdash;" }}</td></tr>
+      {% empty %}<tr><td colspan="6" class="empty">No predictions stored.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

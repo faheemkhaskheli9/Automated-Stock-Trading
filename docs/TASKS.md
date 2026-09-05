@@ -136,4 +136,18 @@ HTMX/Plotly integration and its remaining pages/tests are still pending.
 
 - 2026-09-05 - B6 complete: SARIMA/ETS predictors, statsmodels dependency, replay and leakage-boundary tests. Next: B7 (Ridge/ElasticNet).
 
-Validation: 144 tests passing; Django check, black, isort and ruff clean.
+- 2026-09-05 - New `modeling` app added (separate from the strict `forecasting`
+  path): a UI-driven studio where an operator configures an estimator + a
+  feature spec + a target spec, trains it (joblib artifact + train/holdout
+  metrics + skill-vs-naive), and predicts (persisted `ModelPrediction` with
+  actual-value backfill). Covers sklearn linear / trees / MLP + trivial
+  baselines, an optional torch `lstm` (`requirements-ml.txt`), and target
+  types horizon close/return, direction, weekday-anchored (Mon->Fri) and
+  multi-step. Reuses `research` technical indicators and `strategies` signals
+  as candidate inputs. Adds `scikit-learn` to `requirements.txt` and
+  `MODEL_ARTIFACT_DIR`. This effectively implements the configurable-model +
+  persistence intent of B10-B17 / D6; the `forecasting` B-tasks remain the
+  leakage-strict next-day-close predictors and walk-forward (Phase C).
+  60 new tests. See `docs/MODELING.md`.
+
+Validation: 213 tests passing; Django check, migration check, black, isort and ruff clean.

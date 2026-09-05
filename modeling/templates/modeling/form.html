@@ -1,0 +1,21 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'modeling/modeling.css' %}">
+<main>
+  <div class="intro"><div><p class="eyebrow">MODELING</p><h1>{% if instance %}Edit model{% else %}New model{% endif %}</h1><p class="muted">The structured feature choices are merged into one spec; the JSON override replaces them entirely.</p></div><div><a class="secondary" href="{% url 'modeling:index' %}">Back</a></div></div>
+  <form method="post" class="panel controls model-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      <div class="field-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <button class="primary" type="submit">Save model</button>
+  </form>
+</main>
+{% endblock %}

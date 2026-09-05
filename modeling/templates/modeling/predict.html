@@ -1,0 +1,32 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'modeling/modeling.css' %}">
+<main>
+  <div class="intro"><div><p class="eyebrow">PREDICT</p><h1>{{ model.name }}</h1><p class="muted">Target: {{ model.target_spec.type }}. {% if not model.artifact_path %}Model is not trained yet.{% endif %}</p></div><div><a class="secondary" href="{% url 'modeling:detail' model.pk %}">Back</a></div></div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+  <form method="post" class="panel controls">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}<div class="field-row">{{ field.label_tag }}{{ field }}{% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}{{ field.errors }}</div>{% endfor %}
+    <button class="primary" type="submit">Predict</button>
+  </form>
+  {% if result %}
+  <div class="panel controls">
+    <h2>Result</h2>
+    <p>{{ result.instrument.symbol }} &middot; as of {{ result.as_of|date:"Y-m-d" }} &middot; target {{ result.target_date }}</p>
+    <p style="font-size:28px;font-weight:700">{{ result.predicted_value|floatformat:4 }}</p>
+    {% if result.predicted_json %}<pre class="spec">{{ result.predicted_json }}</pre>{% endif %}
+  </div>
+  {% endif %}
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Instrument</th><th>As of</th><th>Target date</th><th>Predicted</th><th>Actual</th></tr></thead>
+      <tbody>
+      {% for p in predictions %}<tr><td>{{ p.instrument.symbol }}</td><td>{{ p.as_of|date:"Y-m-d" }}</td><td>{{ p.target_date }}</td><td>{{ p.predicted_value|floatformat:4 }}</td><td>{{ p.actual_value|floatformat:4|default:"&mdash;" }}</td></tr>
+      {% empty %}<tr><td colspan="5" class="empty">No predictions stored.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}
