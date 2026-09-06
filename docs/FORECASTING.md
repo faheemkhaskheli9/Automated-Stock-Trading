@@ -91,8 +91,29 @@ close, optional interval/confidence, model, target date) that the
 fits the chosen predictor on all history before the day after the last
 stored bar, uses price + `technical` features only, and targets the next
 weekday — a convenience estimate, not the leakage-strict operational path.
-The backtest-runner and leaderboard panels (D7/D8) remain open. See
+The accuracy leaderboard (D8) is live in the `modeling` app. The strict-path
+backtest runner (D7) is live at `/forecast-backtests/` — see below. See
 [TASKS.md](TASKS.md).
+
+## Dashboard backtest runner (D7)
+
+`/forecast-backtests/` is a thin UI over
+`forecasting.services.run_forecast_backtest`. The **New backtest** form
+(`forecasting.forms.ForecastBacktestForm`) collects a registered predictor
+key, one PSX symbol, JSON predictor params, the research providers (`none`
+for price-only), the fold windows (`scheme` / `train_span` / `test_span` /
+`step` / `gap`), the `start`/`end` dates and the long-if-up trading rule
+(`long_threshold` / `allow_short` / `cost_bps` / `initial_cash`). Submitting
+runs one walk-forward **synchronously** and always persists a
+`ForecastBacktestRun` — a failure lands on the row and is shown as a message,
+never a 500. The detail page renders the aggregate metric cards (MAE / RMSE /
+directional accuracy / **skill vs. naive** / R² and the trading translation),
+an equity-curve SVG, a predicted-vs-actual SVG, the per-fold table and any
+skipped folds, plus a `?export=csv` of the pooled OOS predictions. It trips
+the same `looks_leaky` canary banner as the CLI. Server-rendered, no
+htmx/Plotly — the same Phase D style as the rest of the dashboard;
+`backtesting/` (`/backtests/`) is the counterpart for `modeling.TradingModel`
+artifacts.
 
 ## Walk-forward backtesting (Phase C)
 

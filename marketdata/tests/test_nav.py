@@ -17,6 +17,7 @@ class MenubarTests(TestCase):
         self.assertContains(response, reverse("modeling:index"))
         self.assertContains(response, reverse("modeling:leaderboard"))
         self.assertContains(response, reverse("backtesting:index"))
+        self.assertContains(response, reverse("forecasting:index"))
         self.assertContains(response, 'href="/admin/"')
         self.assertContains(response, 'href="/api/"')
 
@@ -27,12 +28,19 @@ class MenubarTests(TestCase):
         self._assert_app_links(self.client.get("/backtesting/"))
         self._assert_app_links(self.client.get("/modeling/"))
         self._assert_app_links(self.client.get("/backtests/"))
+        self._assert_app_links(self.client.get("/forecast-backtests/"))
 
     def test_model_backtests_section_marked_active(self):
         content = self.client.get("/backtests/").content.decode()
         marker = f'href="{reverse("backtesting:index")}" aria-current="page"'
         self.assertIn(marker, content)
         self.assertNotIn(f'href="{reverse("strategies:backtest")}" aria-current="page"', content)
+
+    def test_forecast_backtests_section_marked_active(self):
+        content = self.client.get("/forecast-backtests/").content.decode()
+        marker = f'href="{reverse("forecasting:index")}" aria-current="page"'
+        self.assertIn(marker, content)
+        self.assertNotIn(f'href="{reverse("backtesting:index")}" aria-current="page"', content)
 
     def test_active_section_marked(self):
         modeling = self.client.get("/modeling/").content.decode()

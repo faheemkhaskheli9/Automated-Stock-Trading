@@ -1,0 +1,97 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">FORECAST BACKTEST</p>
+      <h1>{{ run.name|default:run.predictor_key }} <span class="muted">#{{ run.pk }}</span></h1>
+      <p class="muted">{{ run.predictor_key }} &middot; {{ run.symbol }} ({{ run.exchange }}) &middot; {{ run.get_scheme_display }} &middot; {{ run.start }} &rarr; {{ run.end }}</p>
+    </div>
+    <div>
+      <a class="secondary" href="{% url 'forecasting:create' %}">New</a>
+      {% if run.predictions %}<a class="secondary" href="?export=csv">Predictions CSV</a>{% endif %}
+    </div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+  {% if run.status == 'failed' %}<div class="notice error">Run failed: {{ run.error }}</div>{% endif %}
+  {% if run.looks_leaky %}<div class="notice error">Leak canary tripped: out-of-sample skill is implausibly high. Investigate this predictor before trusting it.</div>{% endif %}
+
+  <div class="panel controls">
+    <h2>Configuration</h2>
+    <pre class="spec">predictor    = {{ run.predictor_key }}   params = {{ run.params }}
+providers    = {{ run.provider_keys|default:"[] (price-only)" }}
+scheme       = {{ run.scheme }}   train_span = {{ run.train_span }}   test_span = {{ run.test_span }}   step = {{ run.step }}   gap = {{ run.gap }}
+date range   = {{ run.start }} &rarr; {{ run.end }}   timezone = {{ run.exchange_timezone }}
+long_threshold = {{ run.long_threshold }}   allow_short = {{ run.allow_short }}
+costs        = {{ run.cost_bps }} bps round-trip   cash = {{ run.initial_cash }}</pre>
+  </div>
+
+  {% if run.status == 'success' %}
+  {% with m=run.metrics nm=run.naive_metrics tr=run.trading %}
+  <div class="panel">
+    <h2 style="padding:18px 20px 0">Aggregate ({{ run.n_folds }} folds run, {{ run.n_skipped_folds }} skipped, {{ run.n_predictions }} OOS rows)</h2>
+    <div class="metric-cards">
+      <div class="card"><div class="k">MAE</div><div class="v">{{ m.mae|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">RMSE</div><div class="v">{{ m.rmse|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Naive MAE</div><div class="v">{{ nm.mae|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Dir. acc</div><div class="v">{{ m.directional_accuracy|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Skill vs naive</div><div class="v">{{ m.skill_vs_naive|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">R&sup2;</div><div class="v">{{ m.r2|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Total return</div><div class="v">{{ tr.total_return|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Ann. return</div><div class="v">{{ tr.annualized_return|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Max drawdown</div><div class="v">{{ tr.max_drawdown|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Sharpe</div><div class="v">{{ tr.sharpe|floatformat:2|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Hit rate</div><div class="v">{{ tr.hit_rate|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Trades</div><div class="v">{{ tr.num_trades|default:0 }}</div></div>
+    </div>
+  </div>
+  {% endwith %}
+
+  {% if equity %}
+  <div class="panel chart">
+    <h2 style="padding:18px 20px 0">Portfolio equity (long-if-up)</h2>
+    <svg viewBox="0 0 1000 240" preserveAspectRatio="none" style="width:100%;height:240px">
+      <polyline fill="none" stroke="#137c5b" stroke-width="2" points="{{ equity }}"/>
+    </svg>
+  </div>
+  {% endif %}
+
+  {% if chart %}
+  <div class="panel chart">
+    <h2 style="padding:18px 20px 0">Predicted vs actual (out-of-sample)</h2>
+    <svg viewBox="0 0 1000 240" preserveAspectRatio="none" style="width:100%;height:240px">
+      <polyline fill="none" stroke="#137c5b" stroke-width="2" points="{{ chart.actual }}"/>
+      <polyline fill="none" stroke="#c07a1e" stroke-width="2" stroke-dasharray="5 4" points="{{ chart.predicted }}"/>
+    </svg>
+    <p class="muted" style="padding:0 20px 16px">Green = actual close, dashed amber = predicted close.</p>
+  </div>
+  {% endif %}
+
+  <div class="panel table-scroll">
+    <h2 style="padding:18px 20px 0">Folds</h2>
+    <table>
+      <thead><tr><th>#</th><th>Train</th><th>Test</th><th>n train</th><th>n test</th><th>MAE</th><th>Dir. acc</th><th>Skill</th></tr></thead>
+      <tbody>
+      {% for f in run.folds %}
+        <tr><td>{{ f.index }}</td><td>{{ f.train_start }} &rarr; {{ f.train_end }}</td><td>{{ f.test_start }} &rarr; {{ f.test_end }}</td><td>{{ f.n_train }}</td><td>{{ f.n_test }}</td><td>{{ f.metrics.mae|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.directional_accuracy|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.skill_vs_naive|floatformat:3|default:"&mdash;" }}</td></tr>
+      {% empty %}<tr><td colspan="8" class="empty">No folds.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if run.skipped_folds %}
+  <div class="panel table-scroll">
+    <h2 style="padding:18px 20px 0">Skipped folds</h2>
+    <table>
+      <thead><tr><th>#</th><th>Reason</th></tr></thead>
+      <tbody>
+      {% for s in run.skipped_folds %}<tr><td>{{ s.index }}</td><td>{{ s.reason }}</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  {% endif %}
+</main>
+{% endblock %}
