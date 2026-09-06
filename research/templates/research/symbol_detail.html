@@ -1,0 +1,79 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<style>
+  .chip{display:inline-block;padding:1px 7px;border-radius:10px;font-size:.75rem}
+  .chip.pos{background:#123a2c;color:#3ecf8e}.chip.neg{background:#3a1a1a;color:#ff6b6b}
+  .chip.neutral,.chip.unknown{background:#26303a;color:#9aa4b2}
+  .rs-sync{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+  .rs-sync .field-row{margin:0}
+</style>
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">RESEARCH</p>
+      <h1>{{ symbol }}</h1>
+      <p class="muted">Point-in-time context for {{ instrument.name }} ({{ instrument.exchange }}).</p>
+    </div>
+    <div><a class="secondary" href="{% url 'research:index' %}">Back</a></div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="panel">
+    <form method="post" action="{% url 'research:sync' %}" class="rs-sync">
+      {% csrf_token %}
+      {% for field in form %}<div class="field-row">{{ field.label_tag }} {{ field }}{{ field.errors }}</div>{% endfor %}
+      <button class="primary" type="submit">Rebuild snapshot</button>
+    </form>
+  </div>
+
+  <h2 class="section-heading">News <span class="muted">({{ news.count_7d }} in 7d / {{ news.count_30d }} in 30d)</span></h2>
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Published</th><th>Headline</th><th>Source</th><th>Tone</th></tr></thead>
+      <tbody>
+      {% for h in news.headlines %}
+        <tr>
+          <td>{{ h.published_at|date:"Y-m-d" }}</td>
+          <td>{{ h.headline }}</td>
+          <td>{{ h.source|default:"&mdash;" }}</td>
+          <td><span class="chip {{ h.tone }}">{% if h.sentiment is not None %}{{ h.sentiment|floatformat:2 }}{% else %}n/a{% endif %}</span></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="4" class="empty">No headlines at or before now.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2 class="section-heading">Fundamentals</h2>
+    {% if fundamentals %}
+      <p class="muted">Report date {{ fundamentals.report_date|date:"Y-m-d" }}{% if fundamentals.source %} &middot; {{ fundamentals.source }}{% endif %}</p>
+      <table>
+        <tbody>{% for name, value in fundamentals.ratios %}<tr><td>{{ name }}</td><td>{{ value }}</td></tr>{% endfor %}</tbody>
+      </table>
+    {% else %}
+      <p class="empty">No fundamentals recorded. <a href="{% url 'research:fundamental_create' %}">Add some</a>.</p>
+    {% endif %}
+  </div>
+
+  <div class="panel">
+    <h2 class="section-heading">Social</h2>
+    <p class="muted">{{ social.count }} mention(s) at or before now.{% if social.latest %} Latest: {{ social.latest.platform }} {{ social.latest.posted_at|date:"Y-m-d" }}.{% endif %} Live ingestion is deferred.</p>
+  </div>
+
+  <h2 class="section-heading">Snapshot features
+    {% if snapshot %}<span class="muted">as of {{ snapshot.as_of|date:"Y-m-d" }} &middot; {{ features|length }}</span>{% endif %}
+  </h2>
+  <div class="panel table-scroll">
+    {% if features %}
+      <table>
+        <thead><tr><th>Feature</th><th>Value</th></tr></thead>
+        <tbody>{% for name, value in features %}<tr><td>{{ name }}</td><td>{{ value|floatformat:4 }}</td></tr>{% endfor %}</tbody>
+      </table>
+    {% else %}
+      <p class="empty">No snapshot yet &mdash; use <b>Rebuild snapshot</b> above.</p>
+    {% endif %}
+  </div>
+</main>
+{% endblock %}

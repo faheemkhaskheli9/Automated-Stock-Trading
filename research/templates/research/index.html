@@ -1,0 +1,92 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<style>
+  .rs-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+  .rs-sync{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
+  .rs-sync .field-row{margin:0}
+  @media (max-width:820px){.rs-grid{grid-template-columns:1fr}}
+</style>
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">RESEARCH</p>
+      <h1>Point-in-time research</h1>
+      <p class="muted">Raw news / social / fundamentals feeds and the frozen <code>ResearchSnapshot</code> bundles the forecasting layer reads. {{ snapshot_total }} snapshot(s), {{ news_total }} headline(s).</p>
+    </div>
+    <div><a class="secondary" href="{% url 'research:fundamental_create' %}">Add fundamentals</a></div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="panel">
+    <h2 class="section-heading">Build a snapshot</h2>
+    <form method="post" action="{% url 'research:sync' %}" class="rs-sync">
+      {% csrf_token %}
+      {% for field in form %}
+        <div class="field-row">{{ field.label_tag }} {{ field }}{{ field.errors }}</div>
+      {% endfor %}
+      <button class="primary" type="submit">Build now</button>
+    </form>
+    <p class="muted">Runs synchronously. News ingest hits the network &mdash; leave it off unless feeds are configured.</p>
+  </div>
+
+  <div class="rs-grid">
+    <div class="panel table-scroll">
+      <h2 class="section-heading">Recent snapshots</h2>
+      <table>
+        <thead><tr><th>Symbol</th><th>As of</th><th>Features</th><th>Providers</th></tr></thead>
+        <tbody>
+        {% for s in snapshots %}
+          <tr>
+            <td><a href="{% url 'research:symbol_detail' %}?symbol={{ s.symbol }}">{{ s.symbol }}</a></td>
+            <td>{{ s.as_of|date:"Y-m-d" }}</td>
+            <td>{{ s.features|length }}</td>
+            <td>{{ s.provider_keys|join:", " }}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="empty">No snapshots yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="panel table-scroll">
+      <h2 class="section-heading">Latest headlines</h2>
+      <table>
+        <thead><tr><th>Published</th><th>Symbol</th><th>Headline</th><th>Sent.</th></tr></thead>
+        <tbody>
+        {% for h in headlines %}
+          <tr>
+            <td>{{ h.published_at|date:"Y-m-d" }}</td>
+            <td>{{ h.symbol }}</td>
+            <td>{{ h.headline }}</td>
+            <td>{% if h.sentiment is not None %}{{ h.sentiment|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+          </tr>
+        {% empty %}
+          <tr><td colspan="4" class="empty">No news ingested yet.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel table-scroll">
+    <h2 class="section-heading">Fundamentals</h2>
+    <table>
+      <thead><tr><th>Symbol</th><th>Report date</th><th>Ratios</th><th>Source</th><th></th></tr></thead>
+      <tbody>
+      {% for f in fundamentals %}
+        <tr>
+          <td>{{ f.symbol }}</td>
+          <td>{{ f.as_of_report_date|date:"Y-m-d" }}</td>
+          <td>{{ f.ratios }}</td>
+          <td>{{ f.source|default:"&mdash;" }}</td>
+          <td><a href="{% url 'research:fundamental_edit' f.pk %}">edit</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="empty">None entered. <a href="{% url 'research:fundamental_create' %}">Add one</a>.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

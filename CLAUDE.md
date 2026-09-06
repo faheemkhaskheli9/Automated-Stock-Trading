@@ -32,8 +32,9 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
 - **Phase 9 (in progress)**: operator UI - move every routine action off Django
   admin / management commands into the server-rendered "PSX Observatory" UI,
   app by app (U1 `signalfeed` watchlist + run actions, U2 `strategies` config
-  + manual signals done; U3 `research`, U4 `portfolio`, U5 `execution` paper
-  trading, U6 `risk` + `User` profile pending). Plan:
+  + manual signals, U3 `research` (`/research/` snapshots + sync + manual
+  fundamentals) done; U4 `portfolio`, U5 `execution` paper trading, U6 `risk`
+  + `User` profile pending). Plan:
   `C:\Users\LENOVO\.claude\plans\wondrous-brewing-starfish.md`. Paper-broker
   actions only - live trading stays gated (Phase 6).
 
@@ -242,6 +243,14 @@ provider MUST NOT read a bar, headline, post, or report dated after its
 - `management/commands/sync_research.py` (`--symbol`, `--as-of`);
   `tasks.py` `ingest_news` / `sync_all_research` (unscheduled).
 - Leak test: a headline published after `as_of` is excluded from the bundle.
+- UI (Phase 9 U3): `/research/` - `index` (recent snapshots + latest
+  headlines + fundamentals table + a "build a snapshot" form),
+  `symbol_detail` (`?symbol=`; reuses `marketdata.views._research_panels` for
+  the news/social/fundamentals panels + shows the latest snapshot's
+  features), `sync` (POST -> `ingest_feeds` optionally, then
+  `get_or_build_snapshot(..., rebuild=True)`, **synchronous**),
+  `fundamental_edit` (manual `CompanyFundamental` entry - the CSV loader's UI
+  twin). `SyncForm` / `FundamentalForm` in `research/forms.py`.
 
 ## `forecasting` app (Phase 7, leakage-strict next-day forecasting)
 
