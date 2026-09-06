@@ -15,6 +15,7 @@ class MenubarTests(TestCase):
         self.assertContains(response, reverse("marketdata:dashboard"))
         self.assertContains(response, reverse("strategies:backtest"))
         self.assertContains(response, reverse("modeling:index"))
+        self.assertContains(response, reverse("backtesting:index"))
         self.assertContains(response, 'href="/admin/"')
         self.assertContains(response, 'href="/api/"')
 
@@ -24,6 +25,15 @@ class MenubarTests(TestCase):
     def test_menubar_shared_across_apps(self):
         self._assert_app_links(self.client.get("/backtesting/"))
         self._assert_app_links(self.client.get("/modeling/"))
+        self._assert_app_links(self.client.get("/backtests/"))
+
+    def test_model_backtests_section_marked_active(self):
+        content = self.client.get("/backtests/").content.decode()
+        marker = f'href="{reverse("backtesting:index")}" aria-current="page"'
+        self.assertIn(marker, content)
+        self.assertNotIn(
+            f'href="{reverse("strategies:backtest")}" aria-current="page"', content
+        )
 
     def test_active_section_marked(self):
         modeling = self.client.get("/modeling/").content.decode()
