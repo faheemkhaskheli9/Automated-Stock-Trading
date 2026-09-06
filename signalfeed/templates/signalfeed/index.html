@@ -1,0 +1,74 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<link rel="manifest" href="{% url 'signalfeed:manifest' %}">
+<style>
+  .sig-cards{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0}
+  .sig-card{border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 16px;min-width:180px;flex:1 1 200px}
+  .sig-dir{font-size:1.3rem;font-weight:700;letter-spacing:.03em}
+  .sig-up{color:#3ecf8e}.sig-down{color:#ff6b6b}.sig-flat{color:#9aa4b2}
+  .sig-meta{color:#9aa4b2;font-size:.85rem;margin-top:4px}
+  .kpi{display:flex;gap:24px;flex-wrap:wrap;margin:8px 0 4px}
+  .kpi b{font-size:1.4rem;display:block}
+  @media (max-width:640px){.mainnav{flex-wrap:wrap}}
+</style>
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">SIGNAL FEED</p>
+      <h1>Weekly signals</h1>
+      <p class="muted">Advisory Monday&rarr;Friday direction calls from trained models. Not orders.</p>
+    </div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="panel">
+    <div class="kpi">
+      <span><b>{{ watch_count }}</b>active watch items</span>
+      <span><b>{% if hit_rate is not None %}{{ hit_rate|floatformat:0 }}%{% else %}&mdash;{% endif %}</b>hit-rate ({{ window_days }}d, n={{ hit_total }})</span>
+      <span><b>{% if latest_target %}{{ latest_target|date:"D d M" }}{% else %}&mdash;{% endif %}</b>latest target</span>
+    </div>
+  </div>
+
+  <h2 class="section-heading">This week</h2>
+  <div class="sig-cards">
+    {% for s in current %}
+      <div class="sig-card">
+        <div class="sig-dir sig-{{ s.direction }}">{{ s.instrument.symbol }} &middot; {{ s.get_direction_display|upper }}</div>
+        <div class="sig-meta">
+          {% if s.expected_return_pct is not None %}expected {{ s.expected_return_pct|floatformat:2 }}%{% endif %}
+          {% if s.predicted_close is not None %}&middot; close {{ s.predicted_close|floatformat:2 }}{% endif %}
+        </div>
+        <div class="sig-meta">
+          {{ s.get_status_display }}
+          {% if s.status == 'suppressed' %}&mdash; {{ s.suppression_reason }}{% endif %}
+        </div>
+        <div class="sig-meta">{{ s.trading_model.name }}</div>
+      </div>
+    {% empty %}
+      <p class="empty">No signals generated yet. Add watch items in <a href="/admin/signalfeed/watchitem/">admin</a> and run <code>send_weekly_signals</code>.</p>
+    {% endfor %}
+  </div>
+
+  <h2 class="section-heading">Recent</h2>
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Target</th><th>Symbol</th><th>Call</th><th>Expected</th><th>Actual</th><th>Result</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for s in recent %}
+        <tr>
+          <td>{{ s.target_date|date:"Y-m-d" }}</td>
+          <td>{{ s.instrument.symbol }}</td>
+          <td class="sig-{{ s.direction }}">{{ s.get_direction_display|upper }}</td>
+          <td>{% if s.expected_return_pct is not None %}{{ s.expected_return_pct|floatformat:2 }}%{% else %}&mdash;{% endif %}</td>
+          <td>{% if s.actual_return_pct is not None %}{{ s.actual_return_pct|floatformat:2 }}%{% else %}&mdash;{% endif %}</td>
+          <td>{% if s.was_correct is None %}&mdash;{% elif s.was_correct %}hit{% else %}miss{% endif %}</td>
+          <td>{{ s.get_status_display }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="empty">Nothing yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

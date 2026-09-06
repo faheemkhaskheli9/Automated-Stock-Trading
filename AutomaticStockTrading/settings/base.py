@@ -47,6 +47,7 @@ INSTALLED_APPS = [
     "portfolio",
     "risk",
     "execution",
+    "signalfeed",
     "api",
 ]
 
@@ -175,3 +176,9 @@ DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="alerts@automatic-stock-t
 # {"text": "..."} POSTs - swap ALERT_WEBHOOK_URL for whichever service without
 # touching notifications.py.
 ALERT_WEBHOOK_URL = env("ALERT_WEBHOOK_URL", default="")
+
+# Telegram bot push (execution/notifications.py + signalfeed delivery). A bot
+# token from @BotFather plus the numeric chat id of the recipient. With
+# either unset, Telegram delivery is skipped.
+TELEGRAM_BOT_TOKEN = env("TELEGRAM_BOT_TOKEN", default="")
+TELEGRAM_CHAT_ID = env("TELEGRAM_CHAT_ID", default="")

@@ -25,6 +25,10 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
   operator dashboard ("PSX Observatory"), and Phase 7 DRF read endpoints. See the
   per-app sections below and `docs/FORECASTING.md` / `docs/MODELING.md` /
   `docs/BACKTESTING.md`. Tracked task-by-task on GitHub Projects board #5.
+- **Phase 8 (in progress)**: `signalfeed` app - weekly Mon->Fri signal delivery
+  (watchlist + accuracy gate + email/webhook/Telegram push + Friday recap),
+  built on the `modeling` studio's `weekday_anchored` target. See the per-app
+  section below and `docs/SIGNALS_PLAN.md`.
 
 Key direction decisions (see `docs/PLAN.md` for the full rationale):
 - Market: PSX. No official free market-data API exists - the plan uses the `psxdata` scraper
@@ -392,6 +396,58 @@ fallback for anything without a bespoke page.
   500s), `/backtests/` (walk-forward runner), `/forecast-backtests/`
   (strict-path runner), `/backtesting/` (`strategies` UI), plus `/admin/` and
   `/api/`.
+
+## `signalfeed` app (Phase 8, weekly signal delivery)
+
+Turns a trained `modeling.TradingModel` into a plain-language weekly call
+("Mon -> Fri: ENGRO UP +2.3%") and pushes it to the operator's phone / inbox.
+**Advisory only** - never places an order (PSX has no self-serve order API;
+live trading stays a separate, gated phase). Routed at `/signals/`.
+
+- `models.py`: `WatchItem` (instrument + `trading_model` + the accuracy bar
+  that model must clear: `min_directional_accuracy` / `min_skill` /
+  `min_expected_move_pct`; `clean()` restricts the model's target to
+  `weekday_anchored`/`horizon_close`/`horizon_return`/`direction`),
+  `WeeklySignal` (one call per Friday, kept even when suppressed/errored:
+  `direction` UP/DOWN/FLAT, `expected_return_pct`, `predicted_close`,
+  `reference_close`, `model_stats` snapshot, `status`
+  pending/sent/suppressed/error, then `actual_close`/`actual_return_pct`/
+  `was_correct` backfilled later; unique per (instrument, model, target_date)).
+- `gate.py` `evaluate_gate(item)` -> `GateResult`: prefers live
+  out-of-sample numbers from `modeling.leaderboard.build_leaderboard`, falls
+  back to the model's last-training `metrics["holdout"]`; suppresses (with a
+  visible reason) a model that clears neither or misses the bar. Never raises.
+- `services.py` (heavy imports deferred, like `modeling.services`):
+  `anchor_monday()`, `generate_weekly_signals(as_of)` (upserts one signal per
+  active watch item; forecast -> direction+magnitude via `_interpret`; per-item
+  failure -> an `error` signal, never propagates),
+  `send_weekly_signals(dry_run, include_flat, channels)`,
+  `recap_weekly_signals(window_days)` (calls `modeling` `backfill_actuals`,
+  grades past signals, sends a hit-rate recap for the week just closed),
+  `train_weekly_models(model_id)` (retrains every model referenced by an
+  active watch item).
+- `delivery.py` `deliver(subject, message, channels)` -> list of channels that
+  accepted it. Reuses `execution.notifications`' per-channel senders
+  (`send_email_alert` / `send_webhook_alert` / `send_telegram_alert`), so
+  order alerts and signals share one path and one Telegram config.
+  `execution/notifications.py` was refactored into those three bool-returning
+  senders + a Telegram sender (`TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`
+  settings, both optional); `send_alert` still behaves as before, now also
+  hitting Telegram when configured.
+- `management/commands/`: `send_weekly_signals` (`--as-of` / `--dry-run` /
+  `--include-flat` / `--channel`), `recap_weekly_signals` (`--as-of` /
+  `--window-days` / `--no-deliver`), `train_weekly_models` (`--model-id`).
+- `tasks.py` (unscheduled): `train_weekly_models_task`,
+  `send_weekly_signals_task`, `recap_weekly_signals_task` - wire to a cloud
+  scheduler: retrain weekly, send Monday pre-open, recap Friday post-close
+  (all Asia/Karachi).
+- UI: `/signals/` (FBV, extends `marketdata/base.html`, linked from the shared
+  nav) - this week's cards + trailing hit-rate + recent table. Links a minimal
+  `manifest.webmanifest` (`/signals/manifest.webmanifest`) for "add to home
+  screen"; no service worker / offline support yet.
+
+Expectations: weekly single-name direction is near coin-flip; the gate is
+what keeps noise out of the feed. Paper/advisory only for now.
 
 ## Deployment
 
