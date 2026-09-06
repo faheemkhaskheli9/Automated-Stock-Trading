@@ -198,8 +198,14 @@ Daily bars and date-only fundamental releases become usable at the next local
 midnight; this is conservative until precise availability timestamps exist.
 `predict_next` requires an explicit target session date, without guessing
 holidays or consulting future bars. Drift rejects inference before its latest
-training label was available. No forecast persistence, fitted artifacts,
-training command or walk-forward evaluation is implemented yet.
+training label was available. Walk-forward evaluation lives in
+`forecasting/backtesting/` (library + `backtest_predictor` command); a run can
+be frozen as a `forecasting.ForecastBacktestRun` row via
+`forecasting.services.run_forecast_backtest` (or `backtest_predictor --save`) -
+one flat, JSON-safe, never-raises record of config + folds + pooled
+predicted-vs-actual + metrics + trading translation + `looks_leaky`. No
+per-forecast prediction persistence, fitted artifacts or training command on
+this strict path yet (those live in the parallel `modeling` app).
 
 Usage and limitations: `docs/FORECASTING.md`. Keep `docs/TASKS.md` updated;
 B6 adds `sarima`/`ets` statistical predictors with training-only parameter fits and prefix replay.
@@ -211,8 +217,9 @@ adds `gradient_boosting` (`HistGradientBoostingRegressor`) over the same frame; 
 since HGB handles NaNs natively). B9 (`forecasting/deep.py`) adds the optional `lstm` predictor -
 another `FrameModelPredictor` subclass (median imputer -> sklearn-wrapped `nn.LSTM` over the last
 `lookback` rows); `torch` is soft-imported from `requirements-ml.txt` and nothing registers when
-it is absent. Next: C-phase walk-forward over the `forecasting` predictors. See
-`docs/FORECASTING.md`.
+it is absent. C-phase walk-forward over the `forecasting` predictors is done
+(`forecasting/backtesting/` + `ForecastBacktestRun` persistence). Next: the
+Phase D dashboard forecast panels (D4/D7/D8). See `docs/FORECASTING.md`.
 
 ## `modeling` app (Phase 7, configurable-model studio)
 

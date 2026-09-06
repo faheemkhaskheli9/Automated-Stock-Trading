@@ -81,9 +81,10 @@ Phase B predictors are complete (B9's optional LSTM below). B10–B17
 (configured models, forecast persistence, commands, daily tasks) are
 delivered in the parallel `modeling` app; B16's LSTM round-trip tests run
 only where the `torch` extra is installed. Phase C walk-forward validation
-for these strict predictors now exists (`forecasting/backtesting/`, below);
-result persistence and the dashboard forecast panels remain open. See
-[TASKS.md](TASKS.md).
+for these strict predictors now exists (`forecasting/backtesting/`, below),
+and a run can be persisted as a `ForecastBacktestRun` row
+(`run_forecast_backtest` / `backtest_predictor --save`). The dashboard
+forecast panels remain open. See [TASKS.md](TASKS.md).
 
 ## Walk-forward backtesting (Phase C)
 
@@ -123,9 +124,30 @@ Leakage guarantees, enforced by tests (`forecasting/tests/test_walk_forward.py`)
 
 `walk_forward` returns a `WalkForwardResult` (per-fold `FoldReport`s, pooled
 `predictions`, `metrics`, `naive_metrics`, `trading`, `skipped_folds`).
-Nothing is persisted yet — a `BacktestRun`-style model and the dashboard
-runner are still open. One predictor, one symbol per run; multi-instrument
-pooling and prediction intervals are out of scope for this pass.
+
+### Persisting a run
+
+`forecasting.services.run_forecast_backtest(...)` runs the walk-forward and
+freezes it as a `forecasting.ForecastBacktestRun` row — one flat record
+holding both the config (predictor key + params + symbol + fold scheme +
+trading rule) and the results (`folds`, `predictions`, `metrics`,
+`naive_metrics`, `trading`, `equity_curve`, `looks_leaky`). Dates are
+serialised to ISO strings so every field is JSON-safe for the API / a future
+dashboard. Like `backtesting.engine.run_backtest`, it **never raises**: a
+failure lands on the row as `status="failed"` + `error`. There is no
+admin-configured "predictor model" on this path (that intent lives in
+`modeling.TradingModel`), so each run carries its own config.
+
+Add `--save` (optionally `--name`) to the command to persist instead of
+print:
+
+```
+python manage.py backtest_predictor OGDC ridge --start 2023-01-01 \
+    --end 2025-06-01 --providers none --save --name "ridge OGDC 23-25"
+```
+
+One predictor, one symbol per run; multi-instrument pooling and prediction
+intervals are out of scope for this pass. No dashboard runner yet.
 
 ## Statistical predictors (B6)
 
