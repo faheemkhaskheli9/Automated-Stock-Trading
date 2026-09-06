@@ -6,7 +6,7 @@ from urllib.parse import urlencode
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required, permission_required
 from django.core.paginator import Paginator
-from django.db.models import Count, Max
+from django.db.models import Count, Max, Q
 from django.http import HttpResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
@@ -91,6 +91,64 @@ def dashboard(request):
             "chart_bars": chart_bars,
             "query": query.urlencode(),
             "total_bars": PriceBar.objects.filter(instrument__exchange="PSX").count(),
+        },
+    )
+
+
+@login_required(login_url="marketdata:login")
+@require_GET
+def instruments(request):
+    """Searchable roster of saved PSX symbols with each one's latest stored
+    daily close and how its most recent persisted model forecast turned out."""
+    query = (request.GET.get("q") or "").strip()
+    qs = (
+        Instrument.objects.filter(exchange="PSX")
+        .annotate(bar_count=Count("price_bars"))
+        .order_by("symbol")
+    )
+    if query:
+        qs = qs.filter(Q(symbol__icontains=query) | Q(name__icontains=query))
+    page = Paginator(qs, 50).get_page(request.GET.get("page"))
+    ids = [instrument.pk for instrument in page]
+
+    # Latest stored daily bar per listed instrument (first row wins per id).
+    last_bars: dict[int, PriceBar] = {}
+    for bar in PriceBar.objects.filter(
+        instrument_id__in=ids, timeframe=PriceBar.Timeframe.DAILY
+    ).order_by("instrument_id", "-timestamp"):
+        last_bars.setdefault(bar.instrument_id, bar)
+
+    # Latest persisted model prediction per instrument (actual backfilled or not).
+    predictions: dict[int, object] = {}
+    if ids:
+        from modeling.models import ModelPrediction
+
+        for prediction in (
+            ModelPrediction.objects.filter(instrument_id__in=ids)
+            .select_related("model")
+            .order_by("instrument_id", "-target_date", "-created_at")
+        ):
+            predictions.setdefault(prediction.instrument_id, prediction)
+
+    rows = [
+        {
+            "instrument": instrument,
+            "last_bar": last_bars.get(instrument.pk),
+            "prediction": predictions.get(instrument.pk),
+        }
+        for instrument in page
+    ]
+    params = request.GET.copy()
+    params.pop("page", None)
+    return render(
+        request,
+        "marketdata/instruments.html",
+        {
+            "rows": rows,
+            "page": page,
+            "q": query,
+            "query": params.urlencode(),
+            "total": Instrument.objects.filter(exchange="PSX").count(),
         },
     )
 
