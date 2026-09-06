@@ -9,3 +9,6 @@
 .field-row .errorlist{color:#a3422d;font-size:12px;margin:6px 0 0}
 pre.spec{background:#f3f7f4;border:1px solid #e2eae4;border-radius:8px;padding:14px;font-size:12px;overflow:auto;white-space:pre-wrap}
 .intro .secondary,.intro .primary{margin-left:6px}
+.win-nav{display:flex;align-items:center;gap:8px;margin-bottom:20px}
+.win-nav .muted{margin:0}
+.win-nav a[aria-current]{background:#edf6f0;color:#124b3d;border-color:#bfe5cd}

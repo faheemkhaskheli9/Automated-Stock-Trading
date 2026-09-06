@@ -14,6 +14,28 @@ Pages (all `login_required`, routed under `/modeling/`):
 | `/modeling/<id>/` | Config, metrics (train vs holdout), run history, **Train now**, recent predictions, predicted-vs-actual chart, predictions CSV |
 | `/modeling/<id>/predict/` | Run the trained model for one instrument / date |
 | `/modeling/estimators/` | Read-only estimator catalogue |
+| `/modeling/leaderboard/` | Active models ranked by rolling accuracy (`?window=30\|90\|180\|365` days) |
+
+### Accuracy leaderboard
+
+`/modeling/leaderboard/` (`modeling/leaderboard.py::build_leaderboard`) scores
+every **active** `TradingModel` over a trailing window of its backfilled
+`ModelPrediction` rows (only predictions whose target session has closed and
+been through `backfill_actuals` count):
+
+- **MAE** - mean `abs_error`, in the target's own units; `None` for the
+  `direction` classifier.
+- **Directional accuracy** - share of predictions that called the move (up vs
+  down) correctly against the last close known at decision time (`as_of`); for
+  `direction` targets this is plain accuracy.
+- **Skill** - `1 - model_mae / naive_mae` for regression targets (beats the
+  naive "no change" forecast when `> 0`), or
+  `(accuracy - majority_rate) / (1 - majority_rate)` for the classifier.
+
+Ranking is by skill (models with no computable skill sort last), tie-broken by
+directional accuracy. MAE is shown but never ranked on - it is not comparable
+across targets on different scales. Active models with no scored predictions in
+the window are listed separately as "unranked".
 
 ## Estimators
 

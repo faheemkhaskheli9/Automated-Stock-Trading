@@ -15,6 +15,7 @@ class MenubarTests(TestCase):
         self.assertContains(response, reverse("marketdata:dashboard"))
         self.assertContains(response, reverse("strategies:backtest"))
         self.assertContains(response, reverse("modeling:index"))
+        self.assertContains(response, reverse("modeling:leaderboard"))
         self.assertContains(response, reverse("backtesting:index"))
         self.assertContains(response, 'href="/admin/"')
         self.assertContains(response, 'href="/api/"')
@@ -41,6 +42,11 @@ class MenubarTests(TestCase):
 
         dashboard = self.client.get("/").content.decode()
         self.assertIn(f'href="{reverse("marketdata:dashboard")}" aria-current="page"', dashboard)
+
+    def test_leaderboard_section_does_not_steal_modeling_marker(self):
+        content = self.client.get("/modeling/leaderboard/").content.decode()
+        self.assertIn(f'href="{reverse("modeling:leaderboard")}" aria-current="page"', content)
+        self.assertNotIn(f'href="{reverse("modeling:index")}" aria-current="page"', content)
 
     def test_no_menubar_when_anonymous(self):
         self.client.logout()

@@ -5,7 +5,7 @@
 <main>
   <div class="intro">
     <div><p class="eyebrow">MODELING</p><h1>Trading models</h1><p class="muted">Configure an estimator, its inputs and its output; train it; use it for prediction.</p></div>
-    <div><a class="primary" href="{% url 'modeling:create' %}">New model</a> <a class="secondary" href="{% url 'modeling:estimators' %}">Estimator catalogue</a></div>
+    <div><a class="primary" href="{% url 'modeling:create' %}">New model</a> <a class="secondary" href="{% url 'modeling:leaderboard' %}">Leaderboard</a> <a class="secondary" href="{% url 'modeling:estimators' %}">Estimator catalogue</a></div>
   </div>
   {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
   <div class="panel table-scroll">

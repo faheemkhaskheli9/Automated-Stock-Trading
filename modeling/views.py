@@ -9,6 +9,7 @@ from django.views.decorators.http import require_http_methods
 
 from . import services
 from .forms import ModelConfigForm, PredictForm
+from .leaderboard import DEFAULT_WINDOW, WINDOW_CHOICES, build_leaderboard
 from .models import TradingModel
 from .registry import catalogue
 
@@ -148,3 +149,24 @@ def predict_view(request, pk):
 @require_http_methods(["GET"])
 def estimators(request):
     return render(request, "modeling/estimators.html", {"estimators": catalogue()})
+
+
+@login_required(login_url="marketdata:login")
+@require_http_methods(["GET"])
+def leaderboard(request):
+    """Rank active models by out-of-sample accuracy over a trailing window."""
+    try:
+        window = int(request.GET.get("window", DEFAULT_WINDOW))
+    except (TypeError, ValueError):
+        window = DEFAULT_WINDOW
+    if window not in WINDOW_CHOICES:
+        window = DEFAULT_WINDOW
+    return render(
+        request,
+        "modeling/leaderboard.html",
+        {
+            "board": build_leaderboard(window_days=window),
+            "window": window,
+            "windows": WINDOW_CHOICES,
+        },
+    )
