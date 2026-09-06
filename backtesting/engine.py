@@ -8,6 +8,13 @@ Two fit modes:
   (the latest, or a pinned ``training_run``) and score every session strictly
   after it was trained. One pseudo-fold; the fold-window config is ignored.
 
+Every ``modeling`` target type is accepted. ``multistep`` models emit a
+vector label/forecast; :func:`_final_step` collapses it to the last horizon
+(predicted close ``steps`` sessions out vs the decision close) so the rest of
+the pipeline - scoring, position sizing, the trade log - stays scalar.
+``weekday_anchored`` models decide once a week and are scored like
+``horizon_close``.
+
 Design mirrors ``modeling.training.train_model``: this function **never
 raises** - any failure is written to the :class:`BacktestRun` row
 (``status="failed"`` + ``error``).
@@ -54,6 +61,19 @@ MIN_TRAIN_ROWS = 10
 
 def _local_dates(index, tz):
     return np.array(index.tz_convert(tz).date)
+
+
+def _final_step(values) -> np.ndarray:
+    """Collapse a forecast/label array to one scalar per row.
+
+    ``multistep`` models emit a vector (the next ``steps`` closes); the
+    backtester trades a single decision, so it scores and sizes off the
+    **last** horizon only - predicted close ``steps`` sessions out vs the
+    decision close, exactly like ``horizon_close``. Single-output targets
+    pass straight through.
+    """
+    arr = np.asarray(values, dtype=float)
+    return arr[:, -1] if arr.ndim == 2 else arr.ravel()
 
 
 def run_backtest(backtest, *, created_by=None) -> BacktestRun:
@@ -153,7 +173,8 @@ def _score_walk_forward(
     is_clf,
     decision_dates,
     avail,
-    y_arr,
+    y_fit,
+    y_scalar,
     anchor_arr,
     tdates,
     inst_labels,
@@ -194,13 +215,13 @@ def _score_walk_forward(
         test_idx = np.flatnonzero(test_mask)
 
         pipeline = build_pipeline(model, ds)
-        pipeline.fit(ds.X.iloc[train_idx], y_arr[train_idx])
-        raw = np.asarray(pipeline.predict(ds.X.iloc[test_idx]), dtype=float).ravel()
+        pipeline.fit(ds.X.iloc[train_idx], y_fit[train_idx])
+        raw = _final_step(pipeline.predict(ds.X.iloc[test_idx]))
         proba_up = None
         if is_clf and hasattr(pipeline, "predict_proba"):
             proba_up = np.asarray(pipeline.predict_proba(ds.X.iloc[test_idx]))[:, 1]
 
-        t_true = y_arr[test_idx]
+        t_true = y_scalar[test_idx]
         t_anchor = anchor_arr[test_idx]
         positions, fold_metrics = _positions_and_metrics(
             bt, target_type, is_clf, raw, t_true, t_anchor, proba_up
@@ -251,7 +272,8 @@ def _score_frozen(
     is_clf,
     decision_dates,
     avail,
-    y_arr,
+    y_fit,
+    y_scalar,
     anchor_arr,
     tdates,
     inst_labels,
@@ -277,6 +299,13 @@ def _score_frozen(
     if payload.get("target_spec") not in (None, model.target_spec):
         raise ValueError(
             "The model's target spec changed since this artifact was trained - retrain it"
+        )
+    if "multioutput" in payload and bool(payload["multioutput"]) != bool(
+        getattr(ds, "multioutput", False)
+    ):
+        raise ValueError(
+            "The model's target shape (single- vs multi-output) changed since this artifact "
+            "was trained - retrain it"
         )
 
     trained_at = pd.Timestamp(payload["trained_at"])
@@ -306,12 +335,12 @@ def _score_frozen(
     test_idx = np.flatnonzero(test_mask)
 
     pipeline = payload["pipeline"]
-    raw = np.asarray(pipeline.predict(ds.X.iloc[test_idx]), dtype=float).ravel()
+    raw = _final_step(pipeline.predict(ds.X.iloc[test_idx]))
     proba_up = None
     if is_clf and hasattr(pipeline, "predict_proba"):
         proba_up = np.asarray(pipeline.predict_proba(ds.X.iloc[test_idx]))[:, 1]
 
-    t_true = y_arr[test_idx]
+    t_true = y_scalar[test_idx]
     t_anchor = anchor_arr[test_idx]
     positions, fold_metrics = _positions_and_metrics(
         bt, target_type, is_clf, raw, t_true, t_anchor, proba_up
@@ -363,8 +392,13 @@ def _execute(bt, run) -> None:
     if bt.fit_mode == bt.FitMode.FROZEN_ARTIFACT and ds_end is None:
         ds_end = timezone.localdate()
     ds = build_dataset(model, start=bt.start, end=ds_end, for_training=True)
-    if getattr(ds, "multioutput", False):
-        raise ValueError("Multi-output targets are not backtestable in v1")
+
+    # ``multistep`` models emit a vector label; ``y_fit`` keeps the full shape
+    # for the estimator, ``y_scalar`` is the last horizon that scoring, position
+    # sizing and the trade log all key off (see ``_final_step``).
+    is_multi = bool(getattr(ds, "multioutput", False))
+    y_fit = np.asarray(ds.y, dtype=float) if is_multi else np.asarray(ds.y, dtype=float).ravel()
+    y_scalar = _final_step(ds.y)
 
     decision_dates = _local_dates(ds.X.index, tz)
     is_clf = ds.task == TASK_CLASSIFICATION
@@ -383,7 +417,8 @@ def _execute(bt, run) -> None:
         is_clf=is_clf,
         decision_dates=decision_dates,
         avail=ds.available_at,
-        y_arr=np.asarray(ds.y, dtype=float).ravel(),
+        y_fit=y_fit,
+        y_scalar=y_scalar,
         anchor_arr=np.asarray(ds.anchor, dtype=float),
         tdates=list(ds.target_dates),
         inst_labels=np.asarray(ds.instrument_labels),
@@ -496,6 +531,8 @@ def _execute(bt, run) -> None:
             "trading": trading,
             "scheme": bt.scheme,
             "fit_mode": bt.fit_mode,
+            "target": target_type,
+            "multioutput": bool(getattr(ds, "multioutput", False)),
             "instruments": sorted(series),
         }
         run.equity_curve = equity_curve

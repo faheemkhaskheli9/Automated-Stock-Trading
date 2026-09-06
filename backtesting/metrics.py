@@ -34,7 +34,9 @@ def positions_from_forecast(
     ``anchor`` is the decision-bar close. For ``horizon_close`` the forecast
     is a price, compared as a fractional gap over the anchor; for
     ``horizon_return`` it is already a return; for ``direction`` the class
-    (or ``proba_up`` when available) is used.
+    (or ``proba_up`` when available) is used. ``weekday_anchored`` and the
+    final-step value of a ``multistep`` model are both prices and fall through
+    to the same close-vs-anchor rule.
     """
     predicted = np.asarray(predicted, dtype=float)
     anchor = np.asarray(anchor, dtype=float)

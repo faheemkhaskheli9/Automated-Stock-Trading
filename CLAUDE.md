@@ -271,10 +271,12 @@ dependencies.
   artifact for `frozen_artifact`), `scheme` `expanding`/`rolling`,
   `train_span`/`test_span`/`step`/`gap` in *sessions with data*,
   `long_threshold`/`allow_short` position rule, cost bps, cash;
-  `clean()` rejects targets other than `horizon_close`/`horizon_return`/
-  `direction`, and requires a trained artifact when `fit_mode` is
-  `frozen_artifact`; `.artifact_path` resolves the pinned run's path or the
-  model's latest), `BacktestRun` (execution row, mirrors
+  `clean()` accepts every `modeling` target type (`weekday_anchored` is scored
+  like `horizon_close` at a weekly decision cadence; `multistep` is collapsed
+  to its final horizon by `engine._final_step` in both scorers) and keeps
+  `SUPPORTED_TARGETS` only as an opt-in gate for future target types; requires
+  a trained artifact when `fit_mode` is `frozen_artifact`; `.artifact_path`
+  resolves the pinned run's path or the model's latest), `BacktestRun` (execution row, mirrors
   `modeling.ModelTrainingRun` - never-raises, records `status`/`error`),
   `BacktestFold`, `BacktestPrediction` (pooled OOS predicted-vs-actual),
   `BacktestTrade`.

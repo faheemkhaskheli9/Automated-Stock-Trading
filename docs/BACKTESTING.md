@@ -33,7 +33,7 @@ Celery (unscheduled): `backtesting.tasks.run_backtest_task(backtest_id)`,
 
 | Field | Meaning |
 |---|---|
-| `model` | The `TradingModel` to evaluate. Its target must be `horizon_close`, `horizon_return` or `direction` (single scalar per decision). |
+| `model` | Any configured `TradingModel` from the `modeling` studio. `horizon_close` / `horizon_return` / `direction` / `weekday_anchored` targets are scored on their single scalar; `weekday_anchored` decisions land once a week (spans below are then counted in weeks). A `multistep` model is backtestable too - its vector forecast is collapsed to the **final** horizon (predicted close `steps` sessions out vs the decision close, like `horizon_close`). |
 | `fit_mode` | `walk_forward` (retrain each fold) or `frozen_artifact` (score the model's already-trained artifact). |
 | `training_run` | `frozen_artifact` only: pin which `ModelTrainingRun`'s artifact to score. Blank = the model's latest (`TradingModel.artifact_path`). `clean()` checks it belongs to `model`, succeeded, and has an artifact. |
 | `scheme` | `expanding` (train from the first session) or `rolling` (fixed `train_span` window). `frozen_artifact` ignores this and the three span fields. |
@@ -58,8 +58,8 @@ Celery (unscheduled): `backtesting.tasks.run_backtest_task(backtest_id)`,
    the test rows. Per-fold accuracy comes from `modeling.metrics`.
    **`frozen_artifact`**: skip folds entirely - `joblib.load` the resolved
    artifact (`Backtest.artifact_path`: the pinned `training_run`'s, else the
-   model's latest), assert its `feature_names` / `target_spec` still match the
-   model, then predict every row whose local decision date is **strictly
+   model's latest), assert its `feature_names` / `target_spec` / output shape
+   still match the model, then predict every row whose local decision date is **strictly
    after** the artifact's training cut-off - the earlier of its `trained_at`
    date and its `train_end` (recorded in the artifact; older artifacts fall
    back to the live `TradingModel.train_end`). The scoring dataset itself is
@@ -67,6 +67,8 @@ Celery (unscheduled): `backtesting.tasks.run_backtest_task(backtest_id)`,
    so a model trained on a past window actually has sessions left to score.
    Recorded as a single fold (`fold_index=0`, `n_train=0`, `train_end` = that
    cut-off date).
+   For a `multistep` model the vector prediction is reduced to its last
+   column (`engine._final_step`) before scoring.
 4. Forecasts -> positions (`metrics.positions_from_forecast`) -> a per-
    instrument all-in/all-out simulation (`metrics.simulate_instrument`,
    costs applied on every position change) -> one pooled portfolio equity
@@ -100,8 +102,15 @@ Celery (unscheduled): `backtesting.tasks.run_backtest_task(backtest_id)`,
 
 ## v1 limitations
 
-- Single-output targets only - `multistep` and `weekday_anchored` models are
-  rejected.
+- Every `modeling` target type is now backtestable, but two are approximated:
+  - `multistep` is scored and traded on its **final** horizon only - the
+    intermediate steps are ignored, so a model tuned for a 3-day path is
+    judged on its day-3 close.
+  - `weekday_anchored` decisions are weekly; the simulation rolls position at
+    each entry-weekday close (week T entry -> week T+1 entry) rather than
+    exiting precisely on the configured exit weekday.
+  A target type with no handler here is still rejected by
+  `Backtest.clean()` (`SUPPORTED_TARGETS`).
 - Position sizing is all-in/all-out per instrument with equal cash allocation;
   no volatility targeting, no `risk` app limits (that app governs *live*
   orders, not this historical replay - same split as

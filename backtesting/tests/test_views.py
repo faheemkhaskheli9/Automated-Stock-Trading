@@ -70,7 +70,9 @@ def test_create_and_run_flow(client, user, model):
 def test_create_rejects_unsupported_target(client, user):
     inst = make_instrument("LUCK")
     make_price_series(inst, n=200)
-    bad_model = make_trading_model([inst], target={"type": "multistep", "steps": 3})
+    # every real modeling target is backtestable now; the SUPPORTED_TARGETS
+    # gate still rejects a target type this app has no handler for.
+    bad_model = make_trading_model([inst], target={"type": "somethingelse"})
     client.force_login(user)
     resp = client.post(
         reverse("backtesting:create"),
