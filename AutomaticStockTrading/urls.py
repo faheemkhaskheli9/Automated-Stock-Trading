@@ -26,6 +26,7 @@ urlpatterns = [
     path("signals/", include("signalfeed.urls")),
     path("research/", include("research.urls")),
     path("portfolio/", include("portfolio.urls")),
+    path("trading/", include("execution.urls")),
     path("", include("marketdata.urls")),
     path("admin/", admin.site.urls),
     path("api/", include("api.urls")),

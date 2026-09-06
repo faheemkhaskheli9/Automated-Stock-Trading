@@ -1,0 +1,65 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<style>
+  .ord-filled{color:#3ecf8e}.ord-rejected{color:#ff6b6b}.ord-cancelled{color:#9aa4b2}
+  .ord-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .ord-bar form{display:inline}
+</style>
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">TRADING</p>
+      <h1>Orders</h1>
+      <p class="muted">Paper only. Every order runs the duplicate guard and <code>risk.engine.evaluate</code> before a broker sees it.</p>
+    </div>
+    <div class="ord-bar">
+      <a class="primary" href="{% url 'execution:place_order' %}">Place paper order</a>
+      {% if can_run_cycle %}
+      <form method="post" action="{% url 'execution:run_cycle' %}"
+        onsubmit="return confirm('Run the trading cycle now for every active strategy with an account?')">
+        {% csrf_token %}
+        <input type="hidden" name="confirm" value="yes">
+        <button class="secondary" type="submit">Run trading cycle</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="panel">
+    <form method="get" class="ord-bar">
+      <label>Status
+        <select name="status" onchange="this.form.submit()">
+          <option value="">all</option>
+          {% for value, label in statuses %}
+            <option value="{{ value }}"{% if value == status %} selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </label>
+    </form>
+  </div>
+
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>#</th><th>Created</th><th>Account</th><th>Instrument</th><th>Side</th><th>Qty</th><th>Status</th><th>Fill</th><th>Strategy</th></tr></thead>
+      <tbody>
+      {% for o in orders %}
+        <tr>
+          <td><a href="{% url 'execution:order_detail' o.pk %}">{{ o.pk }}</a></td>
+          <td>{{ o.created_at|date:"Y-m-d H:i" }}</td>
+          <td>{{ o.account.name }}</td>
+          <td>{{ o.instrument.symbol }}</td>
+          <td>{{ o.get_side_display }}</td>
+          <td>{{ o.quantity }}</td>
+          <td class="ord-{{ o.status }}">{{ o.get_status_display }}</td>
+          <td>{% if o.filled_price %}{{ o.filled_price|floatformat:2 }}{% else %}&mdash;{% endif %}</td>
+          <td>{{ o.strategy.name|default:"manual" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="9" class="empty">No orders yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

@@ -34,8 +34,8 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
   app by app (U1 `signalfeed` watchlist + run actions, U2 `strategies` config
   + manual signals, U3 `research` (`/research/` snapshots + sync + manual
   fundamentals), U4 `portfolio` (`/portfolio/` owner-scoped account list /
-  detail / edit) done; U5 `execution` paper trading, U6 `risk` + `User`
-  profile pending). Plan:
+  detail / edit), U5 `execution` (`/trading/` orders + place paper order +
+  staff-only run-cycle) done; U6 `risk` + `User` profile pending). Plan:
   `C:\Users\LENOVO\.claude\plans\wondrous-brewing-starfish.md`. Paper-broker
   actions only - live trading stays gated (Phase 6).
 
@@ -198,6 +198,14 @@ activate the venv first):
     and/or POSTs `{"text": ...}` to `settings.ALERT_WEBHOOK_URL` (a Slack/Telegram incoming
     webhook) if configured; with neither set, it only logs. Every failure inside is caught -
     an alerting problem must never break order placement.
+  - UI (Phase 9 U5): `/trading/` - `order_list` / `order_detail` (trades +
+    `rejection_reason` + recent `RiskDecision`s for the same account+instrument),
+    both owner-scoped (`_scoped_orders`, staff see all); `place_order` (GET
+    form / POST -> `services.place_order`; `PlaceOrderForm` lists only the
+    user's **paper** accounts, requires a `confirm` checkbox, view re-checks
+    `account.broker == PAPER`); `run_cycle` (POST -> `tasks.run_trading_cycle`,
+    **staff only** since it touches every account, `confirm=yes` required).
+    Synchronous. No live-broker path.
 - `api/` - DRF read API + the strategy on/off toggle. Routed at `/api/` (see
   `AutomaticStockTrading/urls.py`); `/api-auth/` adds session login for the browsable API in
   dev. All endpoints require authentication (`IsAuthenticated`); every viewset except

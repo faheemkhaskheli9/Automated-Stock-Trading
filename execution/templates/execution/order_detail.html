@@ -1,0 +1,60 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<style>.ok{color:#3ecf8e}.no{color:#ff6b6b}</style>
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">TRADING</p>
+      <h1>Order #{{ order.pk }}</h1>
+      <p class="muted">{{ order.get_side_display }} {{ order.quantity }} {{ order.instrument.symbol }} &middot; {{ order.account.name }} &middot; {{ order.created_at|date:"Y-m-d H:i" }}</p>
+    </div>
+    <div><a class="secondary" href="{% url 'execution:order_list' %}">Back</a></div>
+  </div>
+
+  <div class="panel">
+    <table>
+      <tbody>
+        <tr><td>Status</td><td>{{ order.get_status_display }}</td></tr>
+        <tr><td>Filled</td><td>{% if order.filled_price %}{{ order.filled_quantity }} @ {{ order.filled_price|floatformat:4 }}{% else %}&mdash;{% endif %}</td></tr>
+        {% if order.rejection_reason %}<tr><td>Rejection reason</td><td class="no">{{ order.rejection_reason }}</td></tr>{% endif %}
+        <tr><td>Strategy</td><td>{{ order.strategy.name|default:"manual / API" }}</td></tr>
+        <tr><td>Broker order id</td><td>{{ order.broker_order_id|default:"&mdash; (local paper)" }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="section-heading">Trades</h2>
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Executed</th><th>Qty</th><th>Price</th></tr></thead>
+      <tbody>
+      {% for t in trades %}
+        <tr><td>{{ t.executed_at|date:"Y-m-d H:i" }}</td><td>{{ t.quantity }}</td><td>{{ t.price|floatformat:4 }}</td></tr>
+      {% empty %}
+        <tr><td colspan="3" class="empty">No fills.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <h2 class="section-heading">Recent risk decisions <span class="muted">(same account + instrument)</span></h2>
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>When</th><th>Action</th><th>Qty</th><th>Approved</th><th>Reason</th></tr></thead>
+      <tbody>
+      {% for d in decisions %}
+        <tr>
+          <td>{{ d.created_at|date:"Y-m-d H:i" }}</td>
+          <td>{{ d.action }}</td>
+          <td>{{ d.quantity }}</td>
+          <td class="{% if d.approved %}ok{% else %}no{% endif %}">{{ d.approved|yesno:"yes,no" }}</td>
+          <td>{{ d.reason|default:"&mdash;" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="empty">No risk decisions recorded.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}
