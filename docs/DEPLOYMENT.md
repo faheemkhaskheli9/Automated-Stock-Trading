@@ -45,15 +45,15 @@ image already has all of this.
 
 ## Two ways to run the scheduled jobs
 
-There are two scheduled jobs: `marketdata.tasks.sync_all_active_instruments`
-(after PSX market close) and `execution.tasks.run_trading_cycle` (during
-market hours). Both exist as Celery tasks *and* as plain management
-commands that call the same code directly, in-process, with no Celery
-broker/worker involved:
+Every recurring job is defined once in `AutomaticStockTrading/schedules.py`
+(see [The schedule is defined once, in code](#the-schedule-is-defined-once-in-code)
+below for the full list) and exists both as a Celery task *and* as a plain
+management command that calls the same code directly, in-process, with no
+Celery broker/worker involved - e.g. the two original jobs:
 
 ```
-python manage.py sync_market_data
-python manage.py run_trading_cycle
+python manage.py sync_market_data       # marketdata.tasks.sync_all_active_instruments (after PSX close)
+python manage.py run_trading_cycle       # execution.tasks.run_trading_cycle (during market hours)
 ```
 
 This means there are two legitimate deployment shapes:
@@ -91,16 +91,44 @@ command running the same code in-process, so both deployment shapes apply
 | Command | Task | Cadence | Purpose |
 |---|---|---|---|
 | `python manage.py sync_research [--symbol X] [--as-of ...]` | `research.tasks.sync_all_research` | daily, after `sync_market_data` | rebuild the point-in-time feature/news bundle per instrument |
-| `python manage.py predict_model` *(per model)* | `modeling.tasks.run_model_predictions` | daily, after `sync_research` | write next-session `ModelPrediction` rows for every active `TradingModel` |
+| `python manage.py run_model_predictions` | `modeling.tasks.run_model_predictions` | daily, after `sync_research` | write next-session `ModelPrediction` rows for every active `TradingModel` (batch; `predict_model` is the per-model form) |
 | `python manage.py backfill_actuals` | `modeling.tasks.backfill_prediction_actuals` | daily | fill realised closes onto past predictions once their session closes |
 | `python manage.py train_model <id>` | `modeling.tasks.train_model_task` | ad hoc / periodic retrain | (re)fit a `TradingModel` to a joblib artifact |
 | `python manage.py backtest_model <id>` | `backtesting.tasks.run_backtest_task` / `run_active_backtests` | ad hoc | walk-forward evaluate a `TradingModel` |
 
-None are wired to a beat schedule in the repo - add `PeriodicTask` rows
-(Option 1) or managed-scheduler triggers (Option 2) when this is deployed.
-Ordering matters: `sync_market_data` → `sync_research` → `run_model_predictions`
-→ `backfill_prediction_actuals`. `TIME_ZONE` is `Asia/Karachi`, so "after PSX
-close" is roughly 15:30 PKT.
+Phase 8 (`signalfeed`) adds three weekly jobs, all Asia/Karachi:
+
+| Command | Task | Cadence | Purpose |
+|---|---|---|---|
+| `python manage.py train_weekly_models` | `signalfeed.tasks.train_weekly_models_task` | Sunday 06:00 | retrain every `TradingModel` referenced by an active `WatchItem` |
+| `python manage.py send_weekly_signals [--dry-run] [--include-flat]` | `signalfeed.tasks.send_weekly_signals_task` | Monday 08:30 (pre-open) | build + push this week's Mon→Fri calls |
+| `python manage.py recap_weekly_signals` | `signalfeed.tasks.recap_weekly_signals_task` | Friday 17:00 (post-close) | grade the week's signals + send the hit-rate recap |
+
+### The schedule is defined once, in code
+
+`AutomaticStockTrading/schedules.py` is the single source of truth - one
+`ScheduledJob` per recurring job (crontab in `Asia/Karachi`, task path,
+management command, `pipeline_order`). Both shapes read from it:
+
+- **Option 1 (Celery beat):** `settings.CELERY_BEAT_SCHEDULE` is built from
+  it, so `celery -A AutomaticStockTrading beat` (DatabaseScheduler) picks
+  the jobs up with **no admin step**. `python manage.py seed_periodic_tasks
+  [--disabled] [--prune] [--dry-run]` additionally materialises them as
+  `django_celery_beat` `PeriodicTask` rows (named `schedules: <job>`) you can
+  toggle in the admin - idempotent, safe to re-run.
+- **Option 2 (managed scheduler):** point one trigger per job at
+  `python manage.py <command>`. The four-step daily data chain collapses into
+  a single ordered `python manage.py run_daily_pipeline [--fail-fast]
+  [--only JOB] [--skip JOB]` invocation, so the scheduler fires **one**
+  container and ordering is guaranteed in-process instead of via four
+  separately-triggered tasks.
+
+Ordering for the daily chain: `sync_market_data` → `sync_research` →
+`run_model_predictions` → `backfill_prediction_actuals`. `TIME_ZONE` is
+`Asia/Karachi`, so "after PSX close" is roughly 15:30 PKT; the chain starts
+16:00 and staggers each step 20 min. `run_trading_cycle` runs 11:00 during
+market hours. Adjust times by editing `schedules.py` (then re-run
+`seed_periodic_tasks` for Option 1).
 
 ## Model-artifact storage
 

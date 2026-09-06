@@ -507,8 +507,19 @@ what keeps noise out of the feed. Paper/advisory only for now.
 See `docs/DEPLOYMENT.md` for the full picture (two scheduling shapes, open cloud-provider
 choice, secrets handling). Short version: `Dockerfile` is a multi-stage build ending in
 `gunicorn`; `docker-compose.yml` mirrors the full stack locally (web/worker/beat/postgres/
-redis). Both scheduled jobs (`sync_market_data`, `run_trading_cycle`) are also plain
-management commands that run the same code with no Celery broker/worker involved -
-`python manage.py run_trading_cycle` - meant to be invoked directly by a cloud managed
-scheduler (EventBridge/Cloud Scheduler) as a one-off container task, which is the
-plan's preferred shape over running a persistent Celery beat process.
+redis). Every recurring job is also a plain management command that runs the same code
+with no Celery broker/worker involved - meant to be invoked directly by a cloud managed
+scheduler (EventBridge/Cloud Scheduler) as a one-off container task, which is the plan's
+preferred shape over running a persistent Celery beat process.
+
+**Schedule wiring**: `AutomaticStockTrading/schedules.py` is the single source of truth -
+one `ScheduledJob` per recurring job (crontab in `Asia/Karachi`, task path, management
+command, `pipeline_order`). `settings.CELERY_BEAT_SCHEDULE` is built from it (so
+`celery ... beat` needs no admin step); `python manage.py seed_periodic_tasks
+[--disabled] [--prune] [--dry-run]` additionally materialises `django_celery_beat`
+`PeriodicTask` rows (named `schedules: <job>`, idempotent). For the managed-scheduler
+shape, `python manage.py run_daily_pipeline [--fail-fast] [--only JOB] [--skip JOB]` runs
+the ordered daily data chain (`sync_market_data` -> `sync_research` ->
+`run_model_predictions` -> `backfill_actuals`) in one process. Weekly `signalfeed` jobs
+(`train_weekly_models` Sun, `send_weekly_signals` Mon pre-open, `recap_weekly_signals`
+Fri post-close) fire on their own triggers. Change times by editing `schedules.py`.

@@ -163,6 +163,16 @@ CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TASK_TRACK_STARTED = True
 
+# Recurring jobs, defined once in AutomaticStockTrading/schedules.py (the
+# single source of truth for both the Celery-beat and managed-scheduler
+# deployment shapes - see docs/DEPLOYMENT.md). DatabaseScheduler syncs these
+# into django_celery_beat on beat startup, so no manual admin step is needed;
+# `manage.py seed_periodic_tasks` additionally materialises them as editable
+# PeriodicTask rows.
+from AutomaticStockTrading.schedules import beat_schedule  # noqa: E402
+
+CELERY_BEAT_SCHEDULE = beat_schedule()
+
 
 # Alerting (execution/notifications.py) - order fills, rejections, and
 # risk-limit breaches. Both channels are optional; with neither configured,
