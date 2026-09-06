@@ -16,7 +16,8 @@ autodiscovery - stays cheap.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from django.utils import timezone
@@ -154,3 +155,114 @@ def run_forecast_backtest(
     run.finished_at = timezone.now()
     run.save()
     return run
+
+
+@dataclass
+class LiveForecast:
+    """Best-effort next-session forecast for the symbol-detail panel.
+
+    ``prediction`` is a :class:`forecasting.base.PricePrediction` on success;
+    on any failure it is ``None`` and ``error`` carries a short reason. The
+    producing helper never raises.
+    """
+
+    predictor_key: str
+    display_name: str
+    target_date: "object | None" = None
+    prediction: "object | None" = None
+    error: "str | None" = None
+
+
+def latest_forecast(
+    symbol: str,
+    predictor_key: str = "naive",
+    *,
+    exchange: str = "PSX",
+    exchange_timezone: str = "Asia/Karachi",
+    provider_keys: tuple[str, ...] = ("technical",),
+) -> LiveForecast:
+    """Forecast the close of the session following the last stored daily bar.
+
+    Fits the chosen predictor (if trainable) on every stored bar known before
+    the day after the last saved session, then forecasts the next weekday.
+    Only price + ``technical`` features are used - the news/fundamentals/social
+    providers are stubs and would only make a dashboard panel slow and fragile.
+    This is a convenience estimate, not the leakage-strict operational path:
+    it picks the next weekday rather than consulting an exchange calendar.
+
+    Never raises: any failure is returned as :attr:`LiveForecast.error`.
+    """
+    from marketdata.models import PriceBar
+
+    from .registry import get_predictor_class
+
+    zone = ZoneInfo(exchange_timezone)
+    try:
+        cls = get_predictor_class(predictor_key)
+    except KeyError as exc:
+        return LiveForecast(predictor_key, predictor_key, error=str(exc))
+    display_name = getattr(cls, "display_name", "") or predictor_key
+    target_date = None
+
+    try:
+        last_ts = (
+            PriceBar.objects.filter(
+                instrument__symbol=symbol,
+                instrument__exchange=exchange,
+                timeframe=PriceBar.Timeframe.DAILY,
+            )
+            .order_by("-timestamp")
+            .values_list("timestamp", flat=True)
+            .first()
+        )
+        if last_ts is None:
+            return LiveForecast(
+                predictor_key, display_name, error="No saved history to forecast from."
+            )
+
+        last_session = last_ts.astimezone(zone).date()
+        as_of = datetime.combine(last_session + timedelta(days=1), time.min, zone)
+        target_date = last_session + timedelta(days=1)
+        while target_date.weekday() >= 5 or target_date <= last_session:
+            target_date += timedelta(days=1)
+
+        from .features import assemble_prediction_frame, assemble_training_frame
+
+        predictor = cls()
+        if getattr(cls, "trainable", False):
+            predictor.fit(
+                assemble_training_frame(
+                    symbol,
+                    datetime(1900, 1, 1, tzinfo=zone),
+                    as_of,
+                    exchange=exchange,
+                    exchange_timezone=exchange_timezone,
+                    provider_keys=provider_keys,
+                )
+            )
+        frame = assemble_prediction_frame(
+            symbol,
+            as_of,
+            target_date=target_date,
+            exchange=exchange,
+            exchange_timezone=exchange_timezone,
+            provider_keys=provider_keys,
+        )
+        results = predictor.predict_series(frame)
+    except Exception as exc:  # noqa: BLE001 - surfaced on the panel, never propagated
+        logger.debug("latest_forecast failed for %s/%s", symbol, predictor_key, exc_info=True)
+        return LiveForecast(
+            predictor_key,
+            display_name,
+            target_date=target_date,
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+    if not results:
+        return LiveForecast(
+            predictor_key,
+            display_name,
+            target_date=target_date,
+            error="Predictor returned nothing.",
+        )
+    return LiveForecast(predictor_key, display_name, target_date=target_date, prediction=results[0])

@@ -153,7 +153,7 @@ HTMX/Plotly integration and its remaining pages/tests are still pending.
 | D1 | Create `dashboard` app; add `django-htmx` (middleware); base template with Tailwind + vendored Plotly | 🟡 | PSX viewer foundation complete in marketdata; full forecasting dashboard scope pending |
 | D2 | Instruments page — searchable table, last close, last prediction vs actual | 🟡 | PSX viewer foundation complete in marketdata; full forecasting dashboard scope pending |
 | D3 | Symbol detail — Plotly candlestick + volume; HTMX indicator overlay toggles | 🟡 | PSX viewer foundation complete in marketdata; full forecasting dashboard scope pending |
-| D4 | Symbol detail — latest-forecast panel (predicted close, interval, model, confidence) | ⬜ | |
+| D4 | Symbol detail — latest-forecast panel (predicted close, interval, model, confidence) | ✅ | `forecasting.services.latest_forecast` (never-raises) + `marketdata.views._forecast_panel`; `?predictor=` picker (default `naive`), price+technical features only, next-weekday estimate; 5 new tests |
 | D5 | Symbol detail — news headlines + sentiment chips; social/fundamentals "not configured" panels | ⬜ | |
 | D6 | Predictors page — registry catalogue (key, trainable, available) + configured models + last metrics | ✅ | `modeling` `/modeling/estimators/` (catalogue: key/task/available/params) + `/modeling/` (configured models + last holdout metric) |
 | D7 | Backtest runner — form → HTMX POST → per-fold table, skill badge, predicted-vs-actual chart, equity curve; persist `BacktestRun` | ⬜ | |

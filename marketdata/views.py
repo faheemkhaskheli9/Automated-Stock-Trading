@@ -323,6 +323,9 @@ def instrument_detail(request, symbol):
     ]
 
     prediction = None if latest is None else _latest_prediction(instrument)
+    forecast_predictors, selected_predictor, forecast_panel = _forecast_panel(
+        request, instrument, latest
+    )
 
     return render(
         request,
@@ -341,8 +344,57 @@ def instrument_detail(request, symbol):
             "sma_periods": sma_periods,
             "ema_periods": ema_periods,
             "prediction": prediction,
+            "forecast_predictors": forecast_predictors,
+            "selected_predictor": selected_predictor,
+            "forecast": forecast_panel,
         },
     )
+
+
+def _forecast_panel(request, instrument, latest):
+    """Build the symbol-detail live-forecast panel: the list of selectable
+    strict-path predictors, the chosen one (``?predictor=``, default
+    ``naive``), and a rendered forecast for the session after the last bar."""
+    from forecasting.registry import get_predictor_class, registered_keys
+
+    keys = registered_keys()
+    options = [
+        {"key": key, "label": getattr(get_predictor_class(key), "display_name", "") or key}
+        for key in keys
+    ]
+    selected = request.GET.get("predictor") or "naive"
+    if selected not in keys:
+        selected = "naive" if "naive" in keys else (keys[0] if keys else "")
+    if latest is None or not selected:
+        return options, selected, None
+
+    from forecasting.services import latest_forecast
+
+    result = latest_forecast(instrument.symbol, selected)
+    panel = {
+        "predictor_key": result.predictor_key,
+        "display_name": result.display_name,
+        "target_date": result.target_date,
+        "error": result.error,
+    }
+    forecast = result.prediction
+    if forecast is not None:
+        last_close = float(latest.close)
+        panel.update(
+            {
+                "predicted_close": forecast.predicted_close,
+                "lower": forecast.lower,
+                "upper": forecast.upper,
+                "confidence_pct": (
+                    None if forecast.confidence is None else forecast.confidence * 100
+                ),
+                "delta": forecast.predicted_close - last_close,
+                "delta_pct": (
+                    (forecast.predicted_close / last_close - 1) * 100 if last_close else None
+                ),
+            }
+        )
+    return options, selected, panel
 
 
 def _latest_prediction(instrument):

@@ -19,6 +19,42 @@
   <div class="panel"><p class="eyebrow">LATEST MODEL FORECAST</p><h2>{% if prediction %}{{ prediction.predicted_value|floatformat:2|default:'—' }}{% else %}—{% endif %}</h2><p class="muted">{% if prediction %}{{ prediction.model.name }} → {{ prediction.target_date|date:'d M Y' }}{% if prediction.actual_value is not None %} · actual {{ prediction.actual_value|floatformat:2 }}{% else %} · pending{% endif %}{% else %}No persisted prediction{% endif %}</p></div>
 </section>
 
+<section class="panel">
+  <div class="section-heading">
+    <div><h2>Next-session forecast</h2><p class="muted">Live estimate for the session after the last stored bar · price + technical features only</p></div>
+    <span class="badge">PKR</span>
+  </div>
+  {% if forecast_predictors %}
+  <form method="get" class="controls">
+    <input type="hidden" name="days" value="{{ days }}">
+    {% for p in sma_periods %}<input type="hidden" name="sma" value="{{ p }}">{% endfor %}
+    {% for p in ema_periods %}<input type="hidden" name="ema" value="{{ p }}">{% endfor %}
+    <div class="fields">
+      <div>
+        <label for="predictor">Predictor</label>
+        <select name="predictor" id="predictor" onchange="this.form.submit()">
+          {% for opt in forecast_predictors %}<option value="{{ opt.key }}"{% if opt.key == selected_predictor %} selected{% endif %}>{{ opt.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <button class="primary" type="submit">Forecast</button>
+    </div>
+  </form>
+  {% endif %}
+  {% if forecast %}
+    {% if forecast.error %}
+    <p class="muted">Forecast unavailable for <strong>{{ forecast.display_name }}</strong>: {{ forecast.error }}</p>
+    {% else %}
+    <div class="stats">
+      <div class="panel"><p class="eyebrow">PREDICTED CLOSE</p><h2>{{ forecast.predicted_close|floatformat:2 }} <small>PKR</small></h2><p class="muted">{% if forecast.delta >= 0 %}+{% endif %}{{ forecast.delta|floatformat:2 }} ({% if forecast.delta_pct >= 0 %}+{% endif %}{{ forecast.delta_pct|floatformat:2 }}%) vs last close</p></div>
+      <div class="panel"><p class="eyebrow">PREDICTION INTERVAL</p><h2>{% if forecast.lower is not None %}{{ forecast.lower|floatformat:2 }} – {{ forecast.upper|floatformat:2 }}{% else %}Not provided{% endif %}</h2><p class="muted">Confidence {% if forecast.confidence_pct is not None %}{{ forecast.confidence_pct|floatformat:0 }}%{% else %}not provided{% endif %}</p></div>
+      <div class="panel"><p class="eyebrow">MODEL</p><h2>{{ forecast.display_name }}</h2><p class="muted">Target {{ forecast.target_date|date:'d M Y' }} · next-weekday estimate</p></div>
+    </div>
+    {% endif %}
+  {% else %}
+  <p class="muted">No stored history to forecast from.</p>
+  {% endif %}
+</section>
+
 <section class="panel controls">
   <form method="get">
     <div class="fields">
