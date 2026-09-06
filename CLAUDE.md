@@ -19,6 +19,12 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
   in - review before relying on it.
 - **Phase 6 (not started)**: live trading, gated on an actual PSX broker/vendor relationship
   (see docs/PLAN.md) - not just code.
+- **Phase 7 (in progress)**: research/forecasting foundation - `research` (feature
+  providers), `forecasting` (leakage-strict next-day predictors + walk-forward), the
+  parallel `modeling` studio, the `backtesting` walk-forward app, a server-rendered
+  operator dashboard ("PSX Observatory"), and Phase 7 DRF read endpoints. See the
+  per-app sections below and `docs/FORECASTING.md` / `docs/MODELING.md` /
+  `docs/BACKTESTING.md`. Tracked task-by-task on GitHub Projects board #5.
 
 Key direction decisions (see `docs/PLAN.md` for the full rationale):
 - Market: PSX. No official free market-data API exists - the plan uses the `psxdata` scraper
@@ -186,9 +192,44 @@ activate the venv first):
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.
 
-## Forecasting foundation (Phase 7, B1-B9 complete)
+## `research` app (Phase 7, point-in-time feature providers)
 
-`research` supplies technical/news/fundamental/social features. The new
+Supplies the technical / news / fundamental / social features that
+`forecasting` and `modeling` consume. Everything is as-of-timestamped: a
+provider MUST NOT read a bar, headline, post, or report dated after its
+`as_of`, and MUST return a bundle (possibly empty) rather than raise.
+
+- `providers/base.py`: `FeatureProvider` ABC (`get_features(symbol, as_of,
+  *, exchange) -> FeatureBundle`) + `FeatureBundle` dataclass (flat
+  `features` float map + human-readable `sources` citations; `.merge()`
+  refuses key collisions and cross-instrument merges) + a
+  `@register_feature_provider("key")` registry mirroring
+  `strategies/registry.py`.
+- `providers/technical.py` (indicator library: SMA/EMA/RSI/MACD/Bollinger/
+  ATR/stochastic, tested against hand-computed fixtures),
+  `providers/news.py` (feedparser RSS ingest -> `NewsItem`; VADER sentiment
+  on headlines; `news_features()` count/mean/last/trend windows),
+  `providers/fundamentals.py` (`CompanyFundamental`, CSV/manual load),
+  `providers/social.py` (`SocialMention`, fixture loader - live ingestion
+  deferred).
+- `models.py`: `NewsItem` (dedup on `url_hash`, nullable `sentiment`),
+  `CompanyFundamental` (`ratios` JSON, `as_of_report_date`), `SocialMention`,
+  `ResearchSnapshot` (upserted `features`/`sources`/`provider_keys` for one
+  `symbol`+`as_of`).
+- `services.py`: `build_feature_bundle()` merges every requested provider (a
+  raising provider is logged and skipped); `get_or_build_snapshot()` upserts
+  a `ResearchSnapshot`.
+- `apps.py` `ready()` imports the provider modules so their decorators fire
+  (same pattern as `strategies`).
+- `management/commands/sync_research.py` (`--symbol`, `--as-of`);
+  `tasks.py` `ingest_news` / `sync_all_research` (unscheduled).
+- Leak test: a headline published after `as_of` is excluded from the bundle.
+
+## `forecasting` app (Phase 7, leakage-strict next-day forecasting)
+
+The strict next-day-close path (kept deliberately separate from the
+UI-driven `modeling` studio). `research` supplies technical/news/fundamental/
+social features. The
 `forecasting` app registers `naive`, `drift`, `sarima`, `ets`, `ridge`,
 `elasticnet` and `gradient_boosting` predictors through
 `apps.ready()` (plus `lstm` when the optional `torch` extra is installed). `TrainingFrame` separates future labels and label-availability
@@ -218,8 +259,22 @@ since HGB handles NaNs natively). B9 (`forecasting/deep.py`) adds the optional `
 another `FrameModelPredictor` subclass (median imputer -> sklearn-wrapped `nn.LSTM` over the last
 `lookback` rows); `torch` is soft-imported from `requirements-ml.txt` and nothing registers when
 it is absent. C-phase walk-forward over the `forecasting` predictors is done
-(`forecasting/backtesting/` + `ForecastBacktestRun` persistence). Next: the
-Phase D dashboard forecast panels (D4/D7/D8). See `docs/FORECASTING.md`.
+(`forecasting/backtesting/` + `ForecastBacktestRun` persistence).
+
+- `models.py`: just `ForecastBacktestRun` - one flat, JSON-safe,
+  never-raises row (config + folds + pooled predicted-vs-actual + metrics +
+  trading translation + `looks_leaky`). No per-forecast persistence or
+  fitted-artifact storage on this path.
+- `registry.py`: `@register_predictor` / `get_predictor_class` /
+  `registered_keys`; `services.py`: `run_forecast_backtest()` and
+  `latest_forecast(symbol, key)` (the latter powers the `marketdata`
+  symbol-detail live-forecast panel).
+- UI at `/forecast-backtests/` (`forecasting/urls.py` + `views.py` FBVs +
+  `templates/forecasting/`): a config form -> walk-forward run -> per-fold
+  table, skill badge, predicted-vs-actual and equity SVG polylines (D7
+  strict-path runner). Extends `marketdata/base.html`.
+
+See `docs/FORECASTING.md`.
 
 ## `modeling` app (Phase 7, configurable-model studio)
 
@@ -309,6 +364,34 @@ dependencies.
 
 Usage, leakage guarantees and v1 limitations: `docs/BACKTESTING.md`. This
 covers the intent of `docs/TASKS.md` Phase C for the `modeling` studio path.
+
+## Dashboard - "PSX Observatory" (Phase 7, Phase D)
+
+The Phase D operator dashboard was built as **plain server-rendered Django
+pages, not a separate `dashboard` app** and not an SPA - there is no
+`dashboard` in `INSTALLED_APPS`, no django-htmx, no build step. Charts are
+hand-rolled inline SVG polylines; styling is one static stylesheet
+(`marketdata/static/marketdata/dashboard.css`). Django admin remains the
+fallback for anything without a bespoke page.
+
+- Shell: `marketdata/templates/marketdata/base.html` - the `PSX Observatory`
+  header + top nav shared by every Phase 7 UI. Each app's templates
+  `{% extends "marketdata/base.html" %}`. `marketdata:login`/`logout` are the
+  auth entry points; all dashboard views are `login_required`.
+- `marketdata/views.py` owns the core pages: `dashboard` (market overview),
+  `instruments` (searchable table with last close + last persisted
+  `modeling.ModelPrediction` vs actual), `instrument_detail` (candlestick +
+  volume, SMA/EMA overlays, a live-forecast panel via
+  `forecasting.services.latest_forecast` with a `?predictor=` selector, and
+  news/social/fundamentals panels read straight from `research` tables, each
+  degrading independently).
+- The other panels live in their own apps' UIs, all linked from the shared
+  nav: `/modeling/` (studio), `/modeling/leaderboard/` (D8 accuracy
+  leaderboard - `modeling/leaderboard.py`, ranks active `TradingModel`s by
+  trailing out-of-sample accuracy/skill; a bad row logs and is skipped, never
+  500s), `/backtests/` (walk-forward runner), `/forecast-backtests/`
+  (strict-path runner), `/backtesting/` (`strategies` UI), plus `/admin/` and
+  `/api/`.
 
 ## Deployment
 
