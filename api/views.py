@@ -2,22 +2,45 @@ from django.db.models import Q
 from rest_framework import mixins, viewsets
 from rest_framework.permissions import IsAuthenticated
 
+from backtesting.models import Backtest, BacktestRun
 from execution.models import Order, Trade
 from marketdata.models import Instrument, PriceBar
+from modeling.models import ModelPrediction, TradingModel
 from portfolio.models import Account, Position
+from research.models import NewsItem, ResearchSnapshot
 from risk.models import RiskDecision
 from strategies.models import Strategy
 
 from .serializers import (
     AccountSerializer,
+    BacktestRunSerializer,
+    BacktestSerializer,
     InstrumentSerializer,
+    ModelPredictionSerializer,
+    NewsItemSerializer,
     OrderSerializer,
     PositionSerializer,
     PriceBarSerializer,
+    ResearchSnapshotSerializer,
     RiskDecisionSerializer,
     StrategySerializer,
     TradeSerializer,
+    TradingModelSerializer,
 )
+
+
+class SymbolFilterMixin:
+    """Adds ?symbol=ENGRO scoping via `symbol_lookup` (an ORM path). Kept
+    hand-rolled for the same reason as PriceBarViewSet - no django-filter."""
+
+    symbol_lookup: str = "symbol"
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        symbol = self.request.query_params.get("symbol")
+        if symbol:
+            qs = qs.filter(**{self.symbol_lookup: symbol.upper()})
+        return qs
 
 
 class OwnerScopedMixin:
@@ -117,3 +140,53 @@ class RiskDecisionViewSet(
     serializer_class = RiskDecisionSerializer
     permission_classes = [IsAuthenticated]
     owner_lookup = "account__owner"
+
+
+# --- Phase 7: research / forecasting read API -------------------------------
+#
+# Operator-global config + reference data - no OwnerScopedMixin. Read-only
+# except TradingModel's is_active toggle (see StrategyViewSet).
+
+
+class _ReadOnlyViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+    permission_classes = [IsAuthenticated]
+
+
+class NewsItemViewSet(SymbolFilterMixin, _ReadOnlyViewSet):
+    """Ingested headlines + VADER sentiment. Supports ?symbol=ENGRO."""
+
+    queryset = NewsItem.objects.all()
+    serializer_class = NewsItemSerializer
+
+
+class ResearchSnapshotViewSet(SymbolFilterMixin, _ReadOnlyViewSet):
+    """Frozen point-in-time feature bundles. Supports ?symbol=ENGRO."""
+
+    queryset = ResearchSnapshot.objects.all()
+    serializer_class = ResearchSnapshotSerializer
+
+
+class ModelPredictionViewSet(SymbolFilterMixin, _ReadOnlyViewSet):
+    """Stored forecasts with backfilled actuals. Supports ?symbol=ENGRO."""
+
+    queryset = ModelPrediction.objects.select_related("model", "instrument").all()
+    serializer_class = ModelPredictionSerializer
+    symbol_lookup = "instrument__symbol"
+
+
+class BacktestViewSet(_ReadOnlyViewSet):
+    queryset = Backtest.objects.select_related("model").prefetch_related("runs").all()
+    serializer_class = BacktestSerializer
+
+
+class BacktestRunViewSet(_ReadOnlyViewSet):
+    queryset = BacktestRun.objects.select_related("backtest").all()
+    serializer_class = BacktestRunSerializer
+
+
+class TradingModelViewSet(_ReadOnlyViewSet, mixins.UpdateModelMixin):
+    """Read + the is_active on/off toggle, mirroring StrategyViewSet."""
+
+    queryset = TradingModel.objects.prefetch_related("instruments").all()
+    serializer_class = TradingModelSerializer
+    http_method_names = ["get", "patch", "head", "options"]

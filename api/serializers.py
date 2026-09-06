@@ -1,8 +1,11 @@
 from rest_framework import serializers
 
+from backtesting.models import Backtest, BacktestRun
 from execution.models import Order, Trade
 from marketdata.models import Instrument, PriceBar
+from modeling.models import ModelPrediction, TradingModel
 from portfolio.models import Account, Position
+from research.models import NewsItem, ResearchSnapshot
 from risk.models import RiskDecision
 from strategies.models import Strategy
 
@@ -137,5 +140,139 @@ class RiskDecisionSerializer(serializers.ModelSerializer):
             "approved",
             "reason",
             "created_at",
+        ]
+        read_only_fields = fields
+
+
+# --- Phase 7: research / forecasting read API -------------------------------
+#
+# These models are operator-global configuration and reference data (no
+# per-user Account scoping), so the viewsets are plain authenticated reads.
+# TradingModel mirrors StrategySerializer: only the on/off toggle is writable.
+
+
+class NewsItemSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = NewsItem
+        fields = [
+            "id",
+            "symbol",
+            "exchange",
+            "headline",
+            "url",
+            "source",
+            "published_at",
+            "sentiment",
+            "ingested_at",
+        ]
+        read_only_fields = fields
+
+
+class ResearchSnapshotSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ResearchSnapshot
+        fields = [
+            "id",
+            "symbol",
+            "exchange",
+            "as_of",
+            "features",
+            "sources",
+            "provider_keys",
+            "built_at",
+        ]
+        read_only_fields = fields
+
+
+class TradingModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TradingModel
+        fields = [
+            "id",
+            "name",
+            "estimator_key",
+            "estimator_params",
+            "feature_spec",
+            "target_spec",
+            "instruments",
+            "train_start",
+            "train_end",
+            "is_active",
+            "artifact_path",
+            "metrics",
+            "trained_at",
+            "updated_at",
+        ]
+        # Same contract as StrategySerializer - configuration is set up
+        # out-of-band (admin/commands); the API only flips is_active.
+        read_only_fields = [f for f in fields if f != "is_active"]
+
+
+class ModelPredictionSerializer(serializers.ModelSerializer):
+    model = serializers.SlugRelatedField(slug_field="name", read_only=True)
+    instrument = serializers.SlugRelatedField(slug_field="symbol", read_only=True)
+
+    class Meta:
+        model = ModelPrediction
+        fields = [
+            "id",
+            "model",
+            "instrument",
+            "as_of",
+            "target_date",
+            "predicted_value",
+            "predicted_json",
+            "actual_value",
+            "abs_error",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+
+class BacktestRunSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = BacktestRun
+        fields = [
+            "id",
+            "backtest",
+            "status",
+            "started_at",
+            "finished_at",
+            "n_folds",
+            "n_predictions",
+            "n_trades",
+            "metrics",
+            "equity_curve",
+            "error",
+        ]
+        read_only_fields = fields
+
+
+class BacktestSerializer(serializers.ModelSerializer):
+    model = serializers.SlugRelatedField(slug_field="name", read_only=True)
+    runs = BacktestRunSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Backtest
+        fields = [
+            "id",
+            "name",
+            "model",
+            "fit_mode",
+            "scheme",
+            "train_span",
+            "test_span",
+            "step",
+            "gap",
+            "start",
+            "end",
+            "long_threshold",
+            "allow_short",
+            "initial_cash",
+            "commission_bps",
+            "slippage_bps",
+            "is_active",
+            "updated_at",
+            "runs",
         ]
         read_only_fields = fields

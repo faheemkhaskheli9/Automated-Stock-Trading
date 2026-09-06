@@ -158,7 +158,7 @@ HTMX/Plotly integration and its remaining pages/tests are still pending.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| E1 | DRF read viewsets: `Prediction`, `BacktestRun`, `ResearchSnapshot`, `NewsItem`; `PredictionModel` (`is_active`-only writable) | ⬜ | |
+| E1 | DRF read viewsets: `Prediction`, `BacktestRun`, `ResearchSnapshot`, `NewsItem`; `PredictionModel` (`is_active`-only writable) | ✅ | Adapted to the shipped models: `api` exposes `news`/`research-snapshots`/`predictions` (`modeling.ModelPrediction`) + `backtests`/`backtest-runs` (`backtesting`) read-only, `trading-models` (`modeling.TradingModel`) GET/PATCH `is_active` only. All operator-global (`IsAuthenticated`, no owner scoping); `?symbol=` on the three data endpoints. 8 new tests. |
 | E2 | `requirements.txt`: `scikit-learn`, `statsmodels`, `pandas-ta`, `vaderSentiment`, `feedparser`, `django-htmx`, `plotly` | 🟡 | `scikit-learn`, `statsmodels`, `vaderSentiment`, `feedparser` present; `pandas-ta`/`django-htmx`/`plotly` still pending (dashboard) |
 | E3 | `requirements-ml.txt`: `torch` (+ `docs/DEPLOYMENT.md` note) | 🟡 | `requirements-ml.txt` created (`torch`, used only by `modeling` `lstm`); `docs/DEPLOYMENT.md` note still ⬜ |
 | E4 | Update `docs/PLAN.md` — add Phase 7 summary | ✅ | Phase 7 summary already present |
@@ -327,3 +327,18 @@ Validation: 213 tests passing; Django check, migration check, black, isort and r
   308 passed / 6 skipped; black/isort/ruff + Django check clean. Informed by
   the knowledge-base pattern `ml/configurable-model-training.md` (fresh
   pipeline per split, availability guard, never-raise orchestration).
+
+- 2026-09-06 - E1 complete: DRF read API for the Phase 7 data, adapted to the
+  models that actually shipped. New viewsets in `api/` - `news`
+  (`research.NewsItem`), `research-snapshots` (`research.ResearchSnapshot`),
+  `predictions` (`modeling.ModelPrediction`), `backtests`/`backtest-runs`
+  (`backtesting.Backtest`/`BacktestRun`) are list/retrieve only;
+  `trading-models` (`modeling.TradingModel`) is GET/PATCH with only `is_active`
+  writable, mirroring `StrategyViewSet`. All operator-global config/reference
+  data - `IsAuthenticated`, no `OwnerScopedMixin`. Shared `SymbolFilterMixin`
+  (`?symbol=`, `symbol_lookup` ORM path) on the three data endpoints;
+  `_ReadOnlyViewSet` base for the list/retrieve set. 8 new tests
+  (`api/tests/test_api.py::ResearchForecastingApiTests`): auth required, global
+  visibility, symbol filter, nested runs, is_active toggle, config read-only,
+  no create/delete. Full suite 324 passed / 6 skipped; black/isort/ruff +
+  Django check clean. No new dependencies.

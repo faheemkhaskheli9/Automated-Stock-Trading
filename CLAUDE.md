@@ -175,6 +175,13 @@ activate the venv first):
   only - no create/delete). `PositionSerializer` computes `market_value`/`unrealized_pnl` on
   the fly (not stored). There's no separate frontend - Django admin is the operational
   dashboard, per `docs/PLAN.md`.
+  - Phase 7 read endpoints (E1) expose the research/forecasting data, all
+    operator-global (no `OwnerScopedMixin`, plain `IsAuthenticated` reads):
+    `news`/`research-snapshots`/`predictions` (`modeling.ModelPrediction`) and
+    `backtests`/`backtest-runs` (`backtesting` models) are list/retrieve only;
+    `trading-models` (`modeling.TradingModel`) is GET/PATCH with only `is_active`
+    writable, mirroring `StrategyViewSet`. `news`/`research-snapshots`/`predictions`
+    take `?symbol=` (shared `SymbolFilterMixin`, `symbol_lookup` ORM path).
 
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.
