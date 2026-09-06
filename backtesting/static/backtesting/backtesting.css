@@ -14,3 +14,10 @@ pre.spec{background:#f3f7f4;border:1px solid #e2eae4;border-radius:8px;padding:1
 .metric-cards .card{flex:1 1 130px;background:#f3f7f4;border:1px solid #e2eae4;border-radius:8px;padding:12px 14px}
 .metric-cards .card .k{font-size:12px;color:#5c7166}
 .metric-cards .card .v{font-size:20px;font-weight:600;color:#264238}
+.skill-badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;line-height:1.7;border:1px solid transparent;white-space:nowrap}
+.skill-badge.good{background:#e3f4ec;color:#0f6a4d;border-color:#b8e0cd}
+.skill-badge.bad{background:#f6e7e2;color:#a3422d;border-color:#e6c8bf}
+.skill-badge.none{background:#eef2ef;color:#5c7166;border-color:#dde5df}
+.skill-badge.leaky{background:#fbf0dd;color:#8a5a12;border-color:#ecd3a3}
+.metric-cards .card .v .skill-badge{font-size:15px}
+td .skill-badge{font-weight:600}

@@ -1,5 +1,5 @@
 {% extends 'marketdata/base.html' %}
-{% load static %}
+{% load static skill_badges %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
 <main>
@@ -22,7 +22,7 @@
           <td>{{ r.started_at|date:"Y-m-d H:i" }}</td>
           <td>{{ r.status }}</td>
           <td>{{ r.n_folds|default:"&mdash;" }}</td>
-          <td>{% if r.skill_vs_naive != None %}{{ r.skill_vs_naive|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+          <td>{% skill_badge r.skill_vs_naive leaky=r.looks_leaky %}</td>
           <td>{% if r.trading.total_return != None %}{{ r.trading.total_return|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
           <td>{% if r.looks_leaky %}<span class="notice error" style="padding:1px 6px">yes</span>{% else %}no{% endif %}</td>
         </tr>

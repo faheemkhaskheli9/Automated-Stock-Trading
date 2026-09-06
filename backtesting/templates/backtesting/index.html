@@ -1,5 +1,5 @@
 {% extends 'marketdata/base.html' %}
-{% load static %}
+{% load static skill_badges %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
 <main>
@@ -20,7 +20,7 @@
           <td>{{ b.get_fit_mode_display }}</td>
           <td>{% if b.fit_mode == 'frozen_artifact' %}<span class="muted">n/a (frozen)</span>{% else %}{{ b.train_span }}/{{ b.test_span }}/{{ b.step }} (gap {{ b.gap }}){% endif %}</td>
           <td>{% if last %}{{ last.started_at|date:"Y-m-d H:i" }} &middot; {{ last.status }}{% else %}&mdash;{% endif %}</td>
-          <td>{% if last.metrics.accuracy.skill_vs_naive != None %}{{ last.metrics.accuracy.skill_vs_naive|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+          <td>{% skill_badge last.metrics.accuracy.skill_vs_naive %}</td>
           <td>{% if last.metrics.trading.cagr != None %}{{ last.metrics.trading.cagr|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
           <td>{% if b.is_active %}yes{% else %}no{% endif %}</td>
         </tr>

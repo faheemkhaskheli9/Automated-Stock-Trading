@@ -1,5 +1,5 @@
 {% extends 'marketdata/base.html' %}
-{% load static %}
+{% load static skill_badges %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
 <main>
@@ -37,7 +37,7 @@ costs        = {{ run.cost_bps }} bps round-trip   cash = {{ run.initial_cash }}
       <div class="card"><div class="k">RMSE</div><div class="v">{{ m.rmse|floatformat:3|default:"&mdash;" }}</div></div>
       <div class="card"><div class="k">Naive MAE</div><div class="v">{{ nm.mae|floatformat:3|default:"&mdash;" }}</div></div>
       <div class="card"><div class="k">Dir. acc</div><div class="v">{{ m.directional_accuracy|floatformat:3|default:"&mdash;" }}</div></div>
-      <div class="card"><div class="k">Skill vs naive</div><div class="v">{{ m.skill_vs_naive|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Skill vs naive</div><div class="v">{% skill_badge m.skill_vs_naive leaky=run.looks_leaky %}</div></div>
       <div class="card"><div class="k">R&sup2;</div><div class="v">{{ m.r2|floatformat:3|default:"&mdash;" }}</div></div>
       <div class="card"><div class="k">Total return</div><div class="v">{{ tr.total_return|floatformat:3|default:"&mdash;" }}</div></div>
       <div class="card"><div class="k">Ann. return</div><div class="v">{{ tr.annualized_return|floatformat:3|default:"&mdash;" }}</div></div>
@@ -75,7 +75,7 @@ costs        = {{ run.cost_bps }} bps round-trip   cash = {{ run.initial_cash }}
       <thead><tr><th>#</th><th>Train</th><th>Test</th><th>n train</th><th>n test</th><th>MAE</th><th>Dir. acc</th><th>Skill</th></tr></thead>
       <tbody>
       {% for f in run.folds %}
-        <tr><td>{{ f.index }}</td><td>{{ f.train_start }} &rarr; {{ f.train_end }}</td><td>{{ f.test_start }} &rarr; {{ f.test_end }}</td><td>{{ f.n_train }}</td><td>{{ f.n_test }}</td><td>{{ f.metrics.mae|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.directional_accuracy|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.skill_vs_naive|floatformat:3|default:"&mdash;" }}</td></tr>
+        <tr><td>{{ f.index }}</td><td>{{ f.train_start }} &rarr; {{ f.train_end }}</td><td>{{ f.test_start }} &rarr; {{ f.test_end }}</td><td>{{ f.n_train }}</td><td>{{ f.n_test }}</td><td>{{ f.metrics.mae|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.directional_accuracy|floatformat:3|default:"&mdash;" }}</td><td>{% skill_badge f.metrics.skill_vs_naive %}</td></tr>
       {% empty %}<tr><td colspan="8" class="empty">No folds.</td></tr>{% endfor %}
       </tbody>
     </table>

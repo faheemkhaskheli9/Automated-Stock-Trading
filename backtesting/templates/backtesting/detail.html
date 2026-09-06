@@ -1,5 +1,5 @@
 {% extends 'marketdata/base.html' %}
-{% load static %}
+{% load static skill_badges %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
 <main>
@@ -44,7 +44,7 @@ costs        = {{ backtest.commission_bps }} bps commission + {{ backtest.slippa
     <div class="metric-cards">
       <div class="card"><div class="k">MAE</div><div class="v">{{ acc.mae|floatformat:3|default:"&mdash;" }}</div></div>
       <div class="card"><div class="k">Dir. acc</div><div class="v">{{ acc.directional_accuracy|floatformat:3|default:"&mdash;" }}</div></div>
-      <div class="card"><div class="k">Skill vs naive</div><div class="v">{{ acc.skill_vs_naive|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Skill vs naive</div><div class="v">{% skill_badge acc.skill_vs_naive %}</div></div>
       <div class="card"><div class="k">Accuracy</div><div class="v">{{ acc.accuracy|floatformat:3|default:"&mdash;" }}</div></div>
       <div class="card"><div class="k">Total return</div><div class="v">{{ tr.total_return|floatformat:3|default:"&mdash;" }}</div></div>
       <div class="card"><div class="k">CAGR</div><div class="v">{{ tr.cagr|floatformat:3|default:"&mdash;" }}</div></div>
@@ -82,7 +82,7 @@ costs        = {{ backtest.commission_bps }} bps commission + {{ backtest.slippa
       <thead><tr><th>#</th><th>Train</th><th>Test</th><th>n train</th><th>n test</th><th>MAE</th><th>Dir. acc</th><th>Skill</th><th>Accuracy</th></tr></thead>
       <tbody>
       {% for f in folds %}
-        <tr><td>{{ f.fold_index }}</td><td>{{ f.train_start }} &rarr; {{ f.train_end }}</td><td>{{ f.test_start }} &rarr; {{ f.test_end }}</td><td>{{ f.n_train }}</td><td>{{ f.n_test }}</td><td>{{ f.metrics.mae|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.directional_accuracy|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.skill_vs_naive|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.accuracy|floatformat:3|default:"&mdash;" }}</td></tr>
+        <tr><td>{{ f.fold_index }}</td><td>{{ f.train_start }} &rarr; {{ f.train_end }}</td><td>{{ f.test_start }} &rarr; {{ f.test_end }}</td><td>{{ f.n_train }}</td><td>{{ f.n_test }}</td><td>{{ f.metrics.mae|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.directional_accuracy|floatformat:3|default:"&mdash;" }}</td><td>{% skill_badge f.metrics.skill_vs_naive %}</td><td>{{ f.metrics.accuracy|floatformat:3|default:"&mdash;" }}</td></tr>
       {% empty %}<tr><td colspan="9" class="empty">No folds.</td></tr>{% endfor %}
       </tbody>
     </table>
