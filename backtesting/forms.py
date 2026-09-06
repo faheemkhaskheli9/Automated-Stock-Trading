@@ -9,7 +9,10 @@ class BacktestConfigForm(forms.Form):
     name = forms.CharField(max_length=255)
     model = forms.ModelChoiceField(
         queryset=TradingModel.objects.all(),
-        help_text="Only models with a horizon_close / horizon_return / direction target.",
+        help_text=(
+            "Any modeling TradingModel. horizon_close / horizon_return / direction / "
+            "weekday_anchored score directly; multistep is scored on its final horizon."
+        ),
     )
     fit_mode = forms.ChoiceField(
         choices=Backtest.FitMode.choices,

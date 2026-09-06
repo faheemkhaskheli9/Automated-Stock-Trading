@@ -121,6 +121,24 @@ def test_frozen_falls_back_to_model_train_end_for_old_artifacts(trained_model):
     assert run.status == BacktestRun.Status.SUCCESS, run.error
 
 
+def test_frozen_scores_a_multistep_artifact_on_its_final_step(inst, artifacts_dir):
+    model = make_trading_model(
+        [inst], estimator_key="ridge", target={"type": "multistep", "steps": 3}
+    )
+    model.train_end = (datetime.now(timezone.utc) - timedelta(days=TRAIN_END_DAYS_AGO)).date()
+    model.save()
+    assert train_model(model).status == ModelTrainingRun.Status.SUCCESS
+    model.refresh_from_db()
+
+    run = run_backtest(make_backtest(model, fit_mode="frozen_artifact"))
+
+    assert run.status == BacktestRun.Status.SUCCESS, run.error
+    assert run.metrics["target"] == "multistep"
+    assert run.n_predictions > 0
+    p = BacktestPrediction.objects.filter(run=run).first()
+    assert p.predicted_value is not None  # one scalar, not a vector
+
+
 def test_walk_forward_is_still_the_default(trained_model):
     bt = make_backtest(trained_model, train_span=120, test_span=20, step=20)
     assert bt.fit_mode == "walk_forward"

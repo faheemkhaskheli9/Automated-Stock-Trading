@@ -23,10 +23,19 @@ from django.db import models
 from marketdata.models import Instrument
 from modeling.models import ModelTrainingRun, TradingModel
 
-# Forecast targets this v1 can turn into a position. Multi-output
-# (``multistep``) and calendar-anchored (``weekday_anchored``) targets are
-# out of scope - a single scalar per decision is what the sizing logic needs.
-SUPPORTED_TARGETS = ("horizon_close", "horizon_return", "direction")
+# Forecast targets this app can turn into a position. Single-scalar targets
+# (``horizon_close`` / ``horizon_return`` / ``direction``) score directly;
+# ``weekday_anchored`` is scored like ``horizon_close`` at a weekly decision
+# cadence; ``multistep`` is collapsed to its final horizon (see
+# ``engine._final_step``). Every ``modeling`` target type is now backtestable -
+# the tuple stays so a future modeling target must opt in explicitly.
+SUPPORTED_TARGETS = (
+    "horizon_close",
+    "horizon_return",
+    "direction",
+    "weekday_anchored",
+    "multistep",
+)
 
 
 class Backtest(models.Model):
