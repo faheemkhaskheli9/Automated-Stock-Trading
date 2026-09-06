@@ -55,6 +55,52 @@
   {% endif %}
 </section>
 
+<section class="panel">
+  <div class="section-heading">
+    <div><h2>News &amp; headline sentiment</h2><p class="muted">{{ research.news.count_7d }} in last 7 days · {{ research.news.count_30d }} in last 30 days{% if research.news.sentiment_mean_7d is not None %} · 7d mean {{ research.news.sentiment_mean_7d|floatformat:2 }}{% if research.news.sentiment_trend is not None %} ({% if research.news.sentiment_trend >= 0 %}+{% endif %}{{ research.news.sentiment_trend|floatformat:2 }} vs 30d){% endif %}{% endif %}</p></div>
+    <span class="badge">VADER</span>
+  </div>
+  {% if research.news.headlines %}
+  <ul class="headlines">
+    {% for h in research.news.headlines %}
+    <li>
+      <a class="secondary-link" href="{{ h.url }}" target="_blank" rel="noopener noreferrer">{{ h.headline }}</a>
+      <div class="headline-meta">
+        <span class="chip chip-{{ h.tone }}">{% if h.sentiment is not None %}{{ h.sentiment|floatformat:2 }}{% else %}n/a{% endif %}</span>
+        <span class="muted">{{ h.source|default:'unknown source' }} · {{ h.published_at|date:'d M Y' }}</span>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="empty"><p>No stored headlines for {{ instrument.symbol }}. Run <code>manage.py sync_research</code> once PSX news feeds are configured.</p></div>
+  {% endif %}
+</section>
+
+<section class="research-duo">
+  <div class="panel research-note">
+    <p class="eyebrow">SOCIAL SIGNALS</p>
+    {% if research.social.count %}
+    <h2>{{ research.social.count }} mention{{ research.social.count|pluralize }}</h2>
+    <p class="muted">Latest on {{ research.social.latest.platform }} · {{ research.social.latest.posted_at|date:'d M Y' }}</p>
+    {% else %}
+    <h2>Not configured</h2>
+    <p class="muted">Live X / Reddit / StockTwits ingestion is deferred — it needs API credentials. Fixture rows load through <code>research.providers.social.load_mentions</code>.</p>
+    {% endif %}
+  </div>
+  <div class="panel research-note">
+    <p class="eyebrow">COMPANY FUNDAMENTALS</p>
+    {% if research.fundamentals %}
+    <h2>{{ research.fundamentals.ratios|length }} ratio{{ research.fundamentals.ratios|length|pluralize }}</h2>
+    <p class="muted">{% for name, value in research.fundamentals.ratios %}{{ name }} {{ value|floatformat:2 }}{% if not forloop.last %} · {% endif %}{% endfor %}</p>
+    <p class="muted">Reported {{ research.fundamentals.report_date|date:'d M Y' }}{% if research.fundamentals.source %} · {{ research.fundamentals.source }}{% endif %}</p>
+    {% else %}
+    <h2>Not configured</h2>
+    <p class="muted">PSX filings have no free API. Load a point-in-time snapshot with <code>research.providers.fundamentals.load_fundamentals_csv</code>.</p>
+    {% endif %}
+  </div>
+</section>
+
 <section class="panel controls">
   <form method="get">
     <div class="fields">

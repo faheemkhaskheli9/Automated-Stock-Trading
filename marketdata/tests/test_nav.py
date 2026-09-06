@@ -31,9 +31,7 @@ class MenubarTests(TestCase):
         content = self.client.get("/backtests/").content.decode()
         marker = f'href="{reverse("backtesting:index")}" aria-current="page"'
         self.assertIn(marker, content)
-        self.assertNotIn(
-            f'href="{reverse("strategies:backtest")}" aria-current="page"', content
-        )
+        self.assertNotIn(f'href="{reverse("strategies:backtest")}" aria-current="page"', content)
 
     def test_active_section_marked(self):
         modeling = self.client.get("/modeling/").content.decode()
