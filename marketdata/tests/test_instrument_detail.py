@@ -120,3 +120,30 @@ class InstrumentDetailPageTests(TestCase):
         body = self.client.get(self.url).content.decode()
         self.assertIn(f'href="{reverse("marketdata:instruments")}" aria-current="page"', body)
         self.assertNotIn(f'href="{reverse("marketdata:dashboard")}" aria-current="page"', body)
+
+    def test_forecast_panel_defaults_to_naive(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, "Next-session forecast")
+        self.assertEqual(response.context["selected_predictor"], "naive")
+        panel = response.context["forecast"]
+        self.assertIsNone(panel["error"])
+        # Naive predicts the last stored close verbatim.
+        last_close = float(PriceBar.objects.filter(instrument=self.ogdc).latest("timestamp").close)
+        self.assertAlmostEqual(panel["predicted_close"], last_close, places=2)
+        self.assertGreater(panel["target_date"], date(2026, 9, 1))
+
+    def test_forecast_panel_honours_predictor_query_param(self):
+        response = self.client.get(self.url, {"predictor": "drift"})
+        self.assertEqual(response.context["selected_predictor"], "drift")
+        self.assertContains(response, "Random walk with fitted drift")
+        self.assertIsNone(response.context["forecast"]["error"])
+
+    def test_forecast_panel_unknown_predictor_falls_back(self):
+        response = self.client.get(self.url, {"predictor": "does-not-exist"})
+        self.assertEqual(response.context["selected_predictor"], "naive")
+
+    def test_forecast_panel_absent_without_history(self):
+        Instrument.objects.create(symbol="MCB", name="MCB Bank")
+        response = self.client.get(reverse("marketdata:instrument_detail", args=["MCB"]))
+        self.assertIsNone(response.context["forecast"])
+        self.assertContains(response, "No stored history to forecast from.")

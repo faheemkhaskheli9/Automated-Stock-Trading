@@ -83,8 +83,16 @@ delivered in the parallel `modeling` app; B16's LSTM round-trip tests run
 only where the `torch` extra is installed. Phase C walk-forward validation
 for these strict predictors now exists (`forecasting/backtesting/`, below),
 and a run can be persisted as a `ForecastBacktestRun` row
-(`run_forecast_backtest` / `backtest_predictor --save`). The dashboard
-forecast panels remain open. See [TASKS.md](TASKS.md).
+(`run_forecast_backtest` / `backtest_predictor --save`). The symbol-detail
+"next-session forecast" panel (D4) is live: `forecasting.services.latest_forecast(
+symbol, predictor_key)` returns a never-raises `LiveForecast` (predicted
+close, optional interval/confidence, model, target date) that the
+`marketdata` symbol-detail page renders with a `?predictor=` picker. It
+fits the chosen predictor on all history before the day after the last
+stored bar, uses price + `technical` features only, and targets the next
+weekday — a convenience estimate, not the leakage-strict operational path.
+The backtest-runner and leaderboard panels (D7/D8) remain open. See
+[TASKS.md](TASKS.md).
 
 ## Walk-forward backtesting (Phase C)
 
