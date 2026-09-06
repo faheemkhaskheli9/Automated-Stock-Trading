@@ -6,8 +6,9 @@ from django.test import TestCase
 from django.urls import reverse
 
 from marketdata.models import Instrument, PriceBar
-from marketdata.views import _ema, _sma
+from marketdata.views import _ema, _sentiment_tone, _sma
 from modeling.models import ModelPrediction, TradingModel
+from research.models import CompanyFundamental, NewsItem, SocialMention
 
 
 class MovingAverageHelperTests(TestCase):
@@ -147,3 +148,96 @@ class InstrumentDetailPageTests(TestCase):
         response = self.client.get(reverse("marketdata:instrument_detail", args=["MCB"]))
         self.assertIsNone(response.context["forecast"])
         self.assertContains(response, "No stored history to forecast from.")
+
+
+class SentimentToneHelperTests(TestCase):
+    def test_none_is_unknown(self):
+        self.assertEqual(_sentiment_tone(None), "unknown")
+
+    def test_neutral_band(self):
+        self.assertEqual(_sentiment_tone(0.0), "neutral")
+        self.assertEqual(_sentiment_tone(0.04), "neutral")
+
+    def test_positive_and_negative(self):
+        self.assertEqual(_sentiment_tone(0.5), "pos")
+        self.assertEqual(_sentiment_tone(-0.5), "neg")
+
+
+class InstrumentDetailResearchPanelsTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("res", password="test-pass")
+        self.client.force_login(self.user)
+        self.engro = Instrument.objects.create(symbol="ENGRO", name="Engro Corp")
+        self.url = reverse("marketdata:instrument_detail", args=["ENGRO"])
+
+    def _news(self, headline, *, days_ago, sentiment):
+        return NewsItem.objects.create(
+            symbol="ENGRO",
+            exchange="PSX",
+            headline=headline,
+            url=f"https://news.example/{headline.replace(' ', '-')}",
+            url_hash=headline.replace(" ", "-"),
+            source="Example Wire",
+            published_at=datetime.now(tz.utc) - timedelta(days=days_ago),
+            sentiment=sentiment,
+        )
+
+    def test_headlines_render_with_sentiment_chip(self):
+        self._news("Engro posts record profit", days_ago=1, sentiment=0.8)
+        self._news("Engro plant outage weighs on output", days_ago=3, sentiment=-0.6)
+        response = self.client.get(self.url)
+        self.assertContains(response, "Engro posts record profit")
+        self.assertContains(response, "chip chip-pos")
+        self.assertContains(response, "chip chip-neg")
+        news = response.context["research"]["news"]
+        self.assertEqual(news["count_7d"], 2)
+        self.assertEqual(len(news["headlines"]), 2)
+
+    def test_future_headline_is_excluded(self):
+        self._news("Leaked future headline", days_ago=-5, sentiment=0.1)
+        response = self.client.get(self.url)
+        self.assertNotContains(response, "Leaked future headline")
+        self.assertEqual(response.context["research"]["news"]["headlines"], [])
+
+    def test_news_empty_state(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, "No stored headlines for ENGRO")
+
+    def test_social_not_configured_by_default(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, "SOCIAL SIGNALS")
+        self.assertContains(response, "Not configured")
+        self.assertEqual(response.context["research"]["social"]["count"], 0)
+
+    def test_social_summary_when_rows_exist(self):
+        SocialMention.objects.create(
+            symbol="ENGRO",
+            exchange="PSX",
+            platform="stocktwits",
+            posted_at=datetime.now(tz.utc) - timedelta(days=1),
+            sentiment=0.3,
+            reach=120,
+        )
+        response = self.client.get(self.url)
+        self.assertEqual(response.context["research"]["social"]["count"], 1)
+        self.assertContains(response, "1 mention")
+        self.assertContains(response, "stocktwits")
+
+    def test_fundamentals_not_configured_by_default(self):
+        response = self.client.get(self.url)
+        self.assertContains(response, "COMPANY FUNDAMENTALS")
+        self.assertIsNone(response.context["research"]["fundamentals"])
+
+    def test_fundamentals_ratios_when_report_exists(self):
+        CompanyFundamental.objects.create(
+            symbol="ENGRO",
+            exchange="PSX",
+            as_of_report_date=date(2026, 6, 30),
+            ratios={"pe": 8.1, "pb": 1.2},
+            source="csv:seed",
+        )
+        response = self.client.get(self.url)
+        fundamentals = response.context["research"]["fundamentals"]
+        self.assertEqual(fundamentals["ratios"], [("pb", 1.2), ("pe", 8.1)])
+        self.assertContains(response, "pe 8.10")
+        self.assertContains(response, "csv:seed")

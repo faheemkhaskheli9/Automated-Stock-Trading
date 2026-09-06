@@ -347,8 +347,75 @@ def instrument_detail(request, symbol):
             "forecast_predictors": forecast_predictors,
             "selected_predictor": selected_predictor,
             "forecast": forecast_panel,
+            "research": _research_panels(instrument),
         },
     )
+
+
+def _sentiment_tone(score):
+    """Bucket a VADER compound score into a chip class (matches the usual
+    ``|compound| >= 0.05`` neutral band)."""
+    if score is None:
+        return "unknown"
+    if score >= 0.05:
+        return "pos"
+    if score <= -0.05:
+        return "neg"
+    return "neutral"
+
+
+def _research_panels(instrument):
+    """Point-in-time news / social / fundamentals context for the symbol
+    detail page, read straight from the ``research`` app's raw tables.
+
+    Each panel degrades on its own: news shows an empty state, while social
+    and fundamentals render an explanatory "not configured" panel because
+    their live ingestion is deferred (see ``research/providers/``)."""
+    from research.models import CompanyFundamental, NewsItem, SocialMention
+    from research.providers.news import news_features
+
+    now = timezone.now()
+    symbol, exchange = instrument.symbol, instrument.exchange
+
+    headlines = list(
+        NewsItem.objects.filter(exchange=exchange, symbol=symbol, published_at__lte=now).order_by(
+            "-published_at"
+        )[:12]
+    )
+    for item in headlines:
+        item.tone = _sentiment_tone(item.sentiment)
+    feats = news_features(symbol, now, exchange=exchange)
+    news = {
+        "headlines": headlines,
+        "count_7d": int(feats.get("news.count_7d", 0)),
+        "count_30d": int(feats.get("news.count_30d", 0)),
+        "sentiment_mean_7d": feats.get("news.sentiment_mean_7d"),
+        "sentiment_trend": feats.get("news.sentiment_trend"),
+    }
+
+    social_qs = SocialMention.objects.filter(exchange=exchange, symbol=symbol, posted_at__lte=now)
+    social = {"count": social_qs.count(), "latest": social_qs.order_by("-posted_at").first()}
+
+    report = (
+        CompanyFundamental.objects.filter(
+            exchange=exchange, symbol=symbol, as_of_report_date__lt=now.date()
+        )
+        .order_by("-as_of_report_date")
+        .first()
+    )
+    fundamentals = None
+    if report is not None:
+        fundamentals = {
+            "report_date": report.as_of_report_date,
+            "source": report.source,
+            "ratios": sorted(
+                (name, value)
+                for name, value in report.ratios.items()
+                if isinstance(value, (int, float))
+            ),
+        }
+
+    return {"news": news, "social": social, "fundamentals": fundamentals}
 
 
 def _forecast_panel(request, instrument, latest):
