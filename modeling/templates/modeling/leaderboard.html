@@ -1,0 +1,64 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'modeling/modeling.css' %}">
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">MODELING</p>
+      <h1>Accuracy leaderboard</h1>
+      <p class="muted">
+        Active models ranked by skill vs the naive &ldquo;no change&rdquo; forecast, over
+        backfilled predictions dated {{ board.cutoff|date:"Y-m-d" }} &ndash; {{ board.as_of|date:"Y-m-d" }}.
+      </p>
+    </div>
+    <div><a class="secondary" href="{% url 'modeling:index' %}">All models</a></div>
+  </div>
+
+  <div class="win-nav">
+    <span class="muted">Window</span>
+    {% for w in windows %}
+      <a class="secondary" href="?window={{ w }}"{% if w == window %} aria-current="page"{% endif %}>{{ w }}d</a>
+    {% endfor %}
+  </div>
+
+  <div class="panel table-scroll">
+    <table>
+      <thead>
+        <tr>
+          <th>#</th><th>Model</th><th>Task</th><th>Target</th><th>Preds</th>
+          <th>MAE</th><th>Directional acc.</th><th>Skill</th><th>Last target</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in board.ranked %}
+        <tr>
+          <td>{{ row.rank }}</td>
+          <td><a href="{% url 'modeling:detail' row.model.pk %}">{{ row.model.name }}</a></td>
+          <td>{{ row.task }}</td>
+          <td>{{ row.target_type }}</td>
+          <td>{{ row.n }}</td>
+          <td>{% if row.mae is not None %}{{ row.mae|floatformat:4 }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if row.directional_accuracy is not None %}{{ row.directional_accuracy|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if row.skill is not None %}<strong>{{ row.skill|floatformat:3 }}</strong>{% else %}&mdash;{% endif %}</td>
+          <td>{{ row.last_target_date|date:"Y-m-d" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="9" class="empty">
+          No active model has scored predictions in this window.
+          Predictions are ranked once their target session closes and
+          <code>backfill_actuals</code> has run.
+        </td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if board.unscored %}
+  <p class="muted" style="margin-top:18px">
+    Active but unranked (no backfilled predictions in window):
+    {% for m in board.unscored %}<a class="secondary-link" href="{% url 'modeling:detail' m.pk %}">{{ m.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
+  </p>
+  {% endif %}
+</main>
+{% endblock %}
