@@ -1,0 +1,26 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
+<main>
+  <div class="intro">
+    <div><p class="eyebrow">FORECASTING</p><h1>New forecast backtest</h1><p class="muted">Runs synchronously and persists one <code>ForecastBacktestRun</code>. Fold windows are counted in decision rows (sessions with a feature row).</p></div>
+    <div><a class="secondary" href="{% url 'forecasting:index' %}">Back</a></div>
+  </div>
+  <form method="post" class="panel controls bt-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      {% if field.name == 'scheme' %}<h2 class="section">Walk-forward fold windows</h2>{% endif %}
+      {% if field.name == 'long_threshold' %}<h2 class="section">Trading rule &amp; costs</h2><p class="muted">"Long if the forecast is up" replayed against realised closes.</p>{% endif %}
+      <div class="field-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <button class="primary" type="submit">Run backtest</button>
+  </form>
+</main>
+{% endblock %}
