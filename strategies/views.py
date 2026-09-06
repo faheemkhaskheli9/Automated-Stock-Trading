@@ -1,16 +1,18 @@
 import csv
 import logging
 
+from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.http import HttpResponse
-from django.shortcuts import render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
 from marketdata.models import PriceBar
 from marketdata.providers.base import Bar
 
 from .backtesting.engine import run_backtest
-from .forms import BacktestForm
+from .forms import BacktestForm, ManualSignalForm, StrategyForm
+from .models import ManualSignal, Strategy
 from .registry import get_strategy_class
 
 logger = logging.getLogger(__name__)
@@ -134,3 +136,65 @@ def backtest(request):
                     trades=result.trades[-200:][::-1],
                 )
     return render(request, "strategies/backtest.html", context)
+
+
+# --------------------------------------------------------------------------
+# Strategy configuration (what run_trading_cycle executes)
+# --------------------------------------------------------------------------
+@login_required(login_url="marketdata:login")
+@require_http_methods(["GET"])
+def strategy_list(request):
+    strategies = (
+        Strategy.objects.select_related("account").prefetch_related("instruments").order_by("name")
+    )
+    return render(request, "strategies/strategy_list.html", {"strategies": strategies})
+
+
+@login_required(login_url="marketdata:login")
+@require_http_methods(["GET", "POST"])
+def strategy_edit(request, pk=None):
+    instance = get_object_or_404(Strategy, pk=pk) if pk else None
+    form = StrategyForm(request.POST or None, instance=instance)
+    if request.method == "POST" and form.is_valid():
+        obj = form.save()
+        messages.success(request, f"Saved strategy '{obj.name}'.")
+        return redirect("strategies:strategy_list")
+    return render(request, "strategies/strategy_form.html", {"form": form, "instance": instance})
+
+
+@login_required(login_url="marketdata:login")
+@require_http_methods(["POST"])
+def strategy_toggle(request, pk):
+    obj = get_object_or_404(Strategy, pk=pk)
+    obj.is_active = not obj.is_active
+    obj.save(update_fields=["is_active", "updated_at"])
+    messages.success(
+        request,
+        f"'{obj.name}' is now {'active' if obj.is_active else 'inactive'}.",
+    )
+    return redirect("strategies:strategy_list")
+
+
+# --------------------------------------------------------------------------
+# Manual signal entry
+# --------------------------------------------------------------------------
+@login_required(login_url="marketdata:login")
+@require_http_methods(["GET"])
+def manual_list(request):
+    signals = ManualSignal.objects.select_related("instrument", "created_by")[:200]
+    return render(request, "strategies/manual_list.html", {"signals": signals})
+
+
+@login_required(login_url="marketdata:login")
+@require_http_methods(["GET", "POST"])
+def manual_edit(request, pk=None):
+    instance = get_object_or_404(ManualSignal, pk=pk) if pk else None
+    form = ManualSignalForm(request.POST or None, instance=instance)
+    if request.method == "POST" and form.is_valid():
+        obj = form.save(commit=False)
+        if obj.created_by_id is None:
+            obj.created_by = request.user
+        obj.save()
+        messages.success(request, f"Saved manual signal for {obj.instrument.symbol} {obj.date}.")
+        return redirect("strategies:manual_list")
+    return render(request, "strategies/manual_form.html", {"form": form, "instance": instance})

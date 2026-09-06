@@ -2,7 +2,8 @@ from django import forms
 
 from marketdata.models import Instrument
 
-from .models import Strategy
+from .models import ManualSignal, Strategy
+from .registry import registry_choices
 
 
 class BacktestForm(forms.Form):
@@ -35,3 +36,48 @@ class BacktestForm(forms.Form):
         ):
             self.add_error("slow_period", "Slow period must be greater than fast period.")
         return data
+
+
+class StrategyForm(forms.ModelForm):
+    """Create / edit a configured strategy instance (what `run_trading_cycle`
+    executes). `key` is a dropdown of registered strategy keys - never a free
+    text path - and `Strategy.clean()` re-checks it against the registry."""
+
+    key = forms.ChoiceField(choices=[], help_text="Registered strategy class.")
+    params = forms.JSONField(
+        required=False,
+        initial=dict,
+        widget=forms.Textarea(attrs={"rows": 3}),
+        help_text='Keyword args for the strategy class, e.g. {"fast_period": 10}. {} for none.',
+    )
+
+    class Meta:
+        model = Strategy
+        fields = ["name", "key", "params", "instruments", "account", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields["key"].choices = registry_choices()
+        self.fields["instruments"].widget = forms.CheckboxSelectMultiple()
+        self.fields["instruments"].queryset = Instrument.objects.all()
+
+    def clean_params(self):
+        value = self.cleaned_data.get("params")
+        if value in (None, ""):
+            return {}
+        if not isinstance(value, dict):
+            raise forms.ValidationError("Must be a JSON object.")
+        return value
+
+
+class ManualSignalForm(forms.ModelForm):
+    """Operator-entered buy/sell/hold for one instrument on one date, fed
+    through the same pipeline as computed strategies via ManualSignalStrategy."""
+
+    class Meta:
+        model = ManualSignal
+        fields = ["instrument", "date", "action", "note"]
+        widgets = {
+            "date": forms.DateInput(attrs={"type": "date"}),
+            "note": forms.Textarea(attrs={"rows": 2}),
+        }

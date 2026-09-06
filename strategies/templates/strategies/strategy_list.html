@@ -1,0 +1,49 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<style>
+  .st-actions{display:flex;gap:10px;align-items:center}
+  .st-actions form{display:inline}
+  .st-on{color:#3ecf8e}.st-off{color:#9aa4b2}
+</style>
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">STRATEGIES</p>
+      <h1>Configured strategies</h1>
+      <p class="muted">A strategy row is what <code>run_trading_cycle</code> executes: a registered class key + params + instruments + the account it trades on when active.</p>
+    </div>
+    <div class="st-actions">
+      <a class="secondary" href="{% url 'strategies:manual_list' %}">Manual signals</a>
+      <a class="primary" href="{% url 'strategies:strategy_create' %}">New strategy</a>
+    </div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Name</th><th>Key</th><th>Instruments</th><th>Account</th><th>Active</th><th></th></tr></thead>
+      <tbody>
+      {% for s in strategies %}
+        <tr>
+          <td>{{ s.name }}</td>
+          <td>{{ s.key }}</td>
+          <td>{{ s.instruments.count }}</td>
+          <td>{{ s.account.name|default:"—" }}</td>
+          <td class="{% if s.is_active %}st-on{% else %}st-off{% endif %}">{% if s.is_active %}active{% else %}inactive{% endif %}</td>
+          <td class="st-actions">
+            <a href="{% url 'strategies:strategy_edit' s.pk %}">edit</a>
+            <form method="post" action="{% url 'strategies:strategy_toggle' s.pk %}">
+              {% csrf_token %}
+              <button class="text-button" type="submit">{% if s.is_active %}deactivate{% else %}activate{% endif %}</button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="empty">No strategies configured. <a href="{% url 'strategies:strategy_create' %}">Add one</a>.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted">A strategy with no account is never traded live — only backtested. Activate one only when its account and params are right.</p>
+</main>
+{% endblock %}

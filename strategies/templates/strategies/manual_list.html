@@ -1,0 +1,37 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">STRATEGIES</p>
+      <h1>Manual signals</h1>
+      <p class="muted">Operator-entered buy/sell/hold calls. A <code>manual</code> strategy configured for the same instrument replays these through the normal pipeline.</p>
+    </div>
+    <div>
+      <a class="secondary" href="{% url 'strategies:strategy_list' %}">Strategies</a>
+      <a class="primary" href="{% url 'strategies:manual_create' %}">New manual signal</a>
+    </div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Date</th><th>Instrument</th><th>Action</th><th>Note</th><th>By</th><th></th></tr></thead>
+      <tbody>
+      {% for s in signals %}
+        <tr>
+          <td>{{ s.date|date:"Y-m-d" }}</td>
+          <td>{{ s.instrument.symbol }}</td>
+          <td>{{ s.get_action_display }}</td>
+          <td>{{ s.note|default:"—" }}</td>
+          <td>{{ s.created_by.username|default:"—" }}</td>
+          <td><a href="{% url 'strategies:manual_edit' s.pk %}">edit</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="empty">No manual signals yet. <a href="{% url 'strategies:manual_create' %}">Add one</a>.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

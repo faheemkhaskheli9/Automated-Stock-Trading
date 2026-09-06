@@ -1,0 +1,26 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">STRATEGIES</p>
+      <h1>{% if instance %}Edit strategy{% else %}New strategy{% endif %}</h1>
+      <p class="muted">Params are passed straight to the strategy class. Leave the account blank to keep this backtest-only.</p>
+    </div>
+    <div><a class="secondary" href="{% url 'strategies:strategy_list' %}">Back</a></div>
+  </div>
+  <form method="post" class="panel controls">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      <div class="field-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <button class="primary" type="submit">Save strategy</button>
+  </form>
+</main>
+{% endblock %}

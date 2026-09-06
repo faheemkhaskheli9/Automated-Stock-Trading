@@ -31,9 +31,9 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
   section below and `docs/SIGNALS_PLAN.md`.
 - **Phase 9 (in progress)**: operator UI - move every routine action off Django
   admin / management commands into the server-rendered "PSX Observatory" UI,
-  app by app (U1 `signalfeed` watchlist + run actions done; U2 `strategies`
-  config, U3 `research`, U4 `portfolio`, U5 `execution` paper trading, U6
-  `risk` + `User` profile pending). Plan:
+  app by app (U1 `signalfeed` watchlist + run actions, U2 `strategies` config
+  + manual signals done; U3 `research`, U4 `portfolio`, U5 `execution` paper
+  trading, U6 `risk` + `User` profile pending). Plan:
   `C:\Users\LENOVO\.claude\plans\wondrous-brewing-starfish.md`. Paper-broker
   actions only - live trading stays gated (Phase 6).
 
@@ -140,6 +140,13 @@ activate the venv first):
     live trading, not this historical replay.
   - `management/commands/run_backtest.py`: `python manage.py run_backtest SYMBOL
     STRATEGY_KEY [--params '{"fast_period": 10}'] [--start] [--end] [--cash]`.
+  - UI (Phase 9 U2): `/backtesting/` also hosts `Strategy` config
+    (`/backtesting/strategies/` - list / create / edit / activate-toggle;
+    `StrategyForm` `key` is a dropdown of `registry_choices()`, `params` a
+    JSON textarea, `Strategy.clean()` re-checks the key) and `ManualSignal`
+    entry (`/backtesting/manual-signals/`; `created_by` set from the request).
+    Nav gained a "Strategies" link beside "Strategy Backtest". Django admin
+    stays as the fallback.
 - `portfolio/` - `Account` (paper/live, cash_balance, `.equity` property = cash + mark-to-market
   positions) and `Position` (per account+instrument, unique together). `Account.broker` selects
   the `BrokerAdapter` (see `execution/brokers`) - only `"paper"` exists today.
