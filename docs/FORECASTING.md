@@ -72,16 +72,60 @@ estimate calibrated uncertainty. Predictions are not evidence of profitability.
 These guards enforce timestamp boundaries, not the truth of source metadata.
 Raw prices are not corporate-action adjusted, historical revisions are not
 versioned, provider internals cannot be universally checked for future reads,
-and there is no walk-forward evaluation or persistent forecast audit yet.
-The hashes identify assembled feature values, not full dataset versions.
+and there is no persistent forecast audit yet. The hashes identify assembled
+feature values, not full dataset versions.
 
 ## Next tasks
 
 Phase B predictors are complete (B9's optional LSTM below). B10–B17
 (configured models, forecast persistence, commands, daily tasks) are
 delivered in the parallel `modeling` app; B16's LSTM round-trip tests run
-only where the `torch` extra is installed. Phase C adds walk-forward
-validation. See [TASKS.md](TASKS.md).
+only where the `torch` extra is installed. Phase C walk-forward validation
+for these strict predictors now exists (`forecasting/backtesting/`, below);
+result persistence and the dashboard forecast panels remain open. See
+[TASKS.md](TASKS.md).
+
+## Walk-forward backtesting (Phase C)
+
+`forecasting/backtesting/` evaluates a single registered predictor over
+rolling / expanding folds with a hard train/test boundary. It is the
+`forecasting.BasePredictor` counterpart to the standalone `backtesting`
+app (which scores `modeling.TradingModel` artifacts).
+
+```
+python manage.py backtest_predictor OGDC ridge \
+    --start 2023-01-01 --end 2025-06-01 \
+    --scheme expanding --train-span 250 --test-span 21 --step 21 --gap 1 \
+    --providers none --cost-bps 15
+```
+
+Prints a per-fold table, pooled MAE / RMSE / MAPE / R², directional
+accuracy, **skill vs. naive** (`1 - mae / naive_mae`; positive beats a
+random walk), and a "long if the forecast is up" trading translation
+(total / annualised return, max drawdown, Sharpe, hit rate). It warns when
+the out-of-sample skill is implausibly high — the built-in leak canary.
+
+Leakage guarantees, enforced by tests (`forecasting/tests/test_walk_forward.py`):
+
+- **Fold disjointness.** `walkforward.generate_folds` returns contiguous
+  row-position windows with `max(train) < min(test)` and a `gap`-session
+  embargo, asserted on every fold and fuzzed over 40 random configs.
+- **Fresh predictor per fold.** `engine.walk_forward` instantiates the
+  predictor class anew for each fold and calls `fit` on that fold's training
+  slice only — no scaler, imputer or fitted object crosses the boundary.
+- **Point-in-time features.** The training frame is assembled once by
+  `assemble_training_frame`; features for row *t* only ever see history
+  `<= t`, so slicing folds out of it afterwards cannot leak.
+- **Label availability.** A training row is dropped from a fold if its label
+  was not observable strictly before that fold's first test decision.
+- **Leak canary.** A deliberately future-peeking predictor (reads the target
+  close from the DB) is flagged by `engine.looks_leaky`; `naive` is not.
+
+`walk_forward` returns a `WalkForwardResult` (per-fold `FoldReport`s, pooled
+`predictions`, `metrics`, `naive_metrics`, `trading`, `skipped_folds`).
+Nothing is persisted yet — a `BacktestRun`-style model and the dashboard
+runner are still open. One predictor, one symbol per run; multi-instrument
+pooling and prediction intervals are out of scope for this pass.
 
 ## Statistical predictors (B6)
 
@@ -107,7 +151,11 @@ A verified calendar is still needed to detect gaps in caller-supplied replay.
 Each prediction smooths only the available prefix using fixed fitted
 parameters; inference never refits or preserves test state between calls.
 Only closing prices are used; other research features are ignored. Intervals
-and confidence remain unset. Walk-forward fold creation remains Phase C.
+and confidence remain unset. Because `predict_series` demands a contiguous
+replay starting exactly at `fitted_through`, the walk-forward harness (below)
+cannot score `sarima`/`ets` across its `gap` embargo — those folds are
+skipped rather than silently misaligned. Run them with `--gap 0` or drive
+replay manually.
 
 Implementation references: [SARIMAX](https://www.statsmodels.org/stable/generated/statsmodels.tsa.statespace.sarimax.SARIMAX.html)
 and [ETS smoothing with fixed parameters](https://www.statsmodels.org/stable/generated/statsmodels.tsa.exponential_smoothing.ets.ETSModel.smooth.html).

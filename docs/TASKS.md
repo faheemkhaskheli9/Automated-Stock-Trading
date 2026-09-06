@@ -9,10 +9,11 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 ## Current status (2026-09-06)
 
 - Phase A is complete. Phase B foundation (B1–B5) is committed as `40b4265`.
-- Latest validation: **`forecasting` suite 54 passed, 6 skipped** (the skips
+- Latest validation: **`forecasting` suite 64 passed, 6 skipped** (the skips
   are B9's `test_deep.py::TestWithTorch`, which needs the optional `torch`
   extra); Django check and Black/isort/Ruff clean for `forecasting`. Full
-  suite **283 passed, 6 skipped** after B9. Remote CI has not been verified.
+  suite **308 passed, 6 skipped** after the `forecasting/backtesting/`
+  walk-forward package. Remote CI has not been verified.
 - Phase C (walk-forward backtesting) is complete as the standalone
   `backtesting` app over `modeling.TradingModel` — see the Phase C table and
   `docs/BACKTESTING.md`. `Backtest.fit_mode` now also offers
@@ -25,9 +26,14 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
   E2 / E3 (see the tables below). It uses sklearn `Pipeline` estimators + a
   single trailing holdout, **not** `forecasting.BasePredictor` prefix-replay
   or walk-forward.
-- **Next task for the strict `forecasting` path: C-phase walk-forward for the
-  `forecasting` predictors** (the current `backtesting` app is over
-  `modeling.TradingModel`, not `forecasting.BasePredictor`).
+- **C-phase walk-forward for the strict `forecasting` predictors is now
+  implemented** as `forecasting/backtesting/` (`walk_forward` + `generate_folds`
+  + `regression_scores`/`trading_translation` + `backtest_predictor` command +
+  `looks_leaky` canary). Library + CLI only — no `BacktestRun`-style
+  persistence and no dashboard runner for this path yet. The standalone
+  `backtesting` app remains the `modeling.TradingModel` counterpart.
+- **Next task for the strict `forecasting` path**: persist a run
+  (`BacktestRun`-style model) and/or the Phase D forecast panels (D4, D7, D8).
 - B6, B7, B8 and B9 are complete. B9 (`forecasting/deep.py`) adds the optional
   `lstm` predictor: a `FrameModelPredictor` subclass (median imputer →
   sklearn-wrapped `nn.LSTM`) that soft-imports `torch` and registers nothing
@@ -98,24 +104,32 @@ Status legend: ⬜ Not started · 🟡 In progress · ✅ Done · ⛔ Blocked ·
 
 ## Phase C — leakage-safe walk-forward backtesting
 
-Delivered as the standalone **`backtesting` app** over `modeling.TradingModel`
-(routed `/backtests/`), rather than inside `forecasting`. Full UI + admin +
-`backtest_model` command + unscheduled Celery tasks. 44 tests. See
-`docs/BACKTESTING.md`. A `Backtest` runs in one of two `fit_mode`s:
-`walk_forward` (retrain each fold, the original C-phase behaviour) or
-`frozen_artifact` (score a `modeling`-trained joblib artifact, latest or a
-pinned `training_run`, over every session after `trained_at`).
+Delivered on two tracks:
+
+1. The standalone **`backtesting` app** over `modeling.TradingModel` (routed
+   `/backtests/`). Full UI + admin + `backtest_model` command + unscheduled
+   Celery tasks. 44 tests. See `docs/BACKTESTING.md`. A `Backtest` runs in
+   one of two `fit_mode`s: `walk_forward` (retrain each fold) or
+   `frozen_artifact` (score a `modeling`-trained joblib artifact over every
+   session after `trained_at`).
+2. **`forecasting/backtesting/`** — the strict-path counterpart over
+   `forecasting.BasePredictor` (the C-table columns below). Library + the
+   `backtest_predictor` command + `looks_leaky` canary; 10 tests
+   (`forecasting/tests/test_walk_forward.py`). No result persistence or
+   dashboard runner for this path yet. `sarima`/`ets` folds are skipped
+   unless `--gap 0` (their prefix-replay contract). See
+   `docs/FORECASTING.md` § Walk-forward backtesting.
 
 | # | Task | Status | Notes |
 |---|------|--------|-------|
-| C1 | `backtesting/walkforward.py`: `walk_forward()` expanding/rolling schemes, fresh predictor per fold | ✅ | `generate_folds()` (pure) + `engine.run_backtest` builds a fresh `modeling.training.build_pipeline` per fold |
+| C1 | `backtesting/walkforward.py`: `walk_forward()` expanding/rolling schemes, fresh predictor per fold | ✅ | `generate_folds()` (pure) + `engine.run_backtest` builds a fresh `modeling.training.build_pipeline` per fold. **Strict path**: `forecasting/backtesting/walkforward.py::generate_folds` (row-position windows) + `engine.walk_forward` instantiates the predictor class per fold, `fit()` on that slice only |
 | C2 | Enforce `max(train.index) < min(test.index)` with a gap; assert on every fold | ✅ | `generate_folds` asserts `train_end < test_start`; `engine` also drops train rows whose label wasn't observable before the fold's first test decision |
-| C3 | `backtesting/metrics.py`: MAE/RMSE/MAPE/R², directional accuracy, skill-vs-naive, trading translation | ✅ | Accuracy reuses `modeling.metrics`; `metrics.positions_from_forecast` + `simulate_instrument` + `combine_equity_curves` do the trade translation |
+| C3 | `backtesting/metrics.py`: MAE/RMSE/MAPE/R², directional accuracy, skill-vs-naive, trading translation | ✅ | Accuracy reuses `modeling.metrics`; `metrics.positions_from_forecast` + `simulate_instrument` + `combine_equity_curves` do the trade translation. **Strict path**: `forecasting/backtesting/metrics.py::regression_scores` + `trading_translation` (long-if-up, cost-bps, equity curve) |
 | C4 | `WalkForwardResult`: per-fold table + aggregate + predicted-vs-actual & equity series | ✅ | `BacktestRun.metrics` (accuracy + trading) + `equity_curve`; `BacktestFold` / `BacktestPrediction` / `BacktestTrade` rows; detail page renders all of it |
-| C5 | Leak canary test: future-peeking predictor is flagged by the harness | ✅ | `test_engine.py::test_naive_baseline_is_beatable_reference` (naive skill-vs-naive ~= 0); `test_leakage.py` availability asserts |
+| C5 | Leak canary test: future-peeking predictor is flagged by the harness | ✅ | `test_engine.py::test_naive_baseline_is_beatable_reference` (naive skill-vs-naive ~= 0); `test_leakage.py` availability asserts. **Strict path**: `test_walk_forward.py::test_future_peeking_predictor_is_flagged_as_leaky` — a predictor that reads the target close from the DB trips `engine.looks_leaky`; `naive` does not |
 | C6 | Leak canary test: future-dated headline does not change a feature bundle | ✅ | Covered upstream by `research`/`modeling` point-in-time tests; `backtesting` inherits `build_dataset` |
-| C7 | Leak canary test: train/test index disjointness over random fold configs | ✅ | `test_walkforward.py::test_train_always_before_test_with_gap` (20 randomised configs) |
-| C8 | `management/commands/backtest_predictor.py` (…) | ✅ | `backtesting` `backtest_model <ID> [--fit-mode --training-run --scheme --train-span --test-span --step --gap --start --end]` |
+| C7 | Leak canary test: train/test index disjointness over random fold configs | ✅ | `test_walkforward.py::test_train_always_before_test_with_gap` (20 randomised configs). **Strict path**: `test_walk_forward.py::test_generate_folds_are_ordered_and_disjoint_with_gap` (40 randomised configs, `max(train) < min(test)` + embargo) |
+| C8 | `management/commands/backtest_predictor.py` (…) | ✅ | `backtesting` `backtest_model <ID> [...]`. **Strict path**: `forecasting` `backtest_predictor SYMBOL PREDICTOR_KEY --start --end [--scheme --train-span --test-span --step --gap --providers --params --cost-bps --allow-short --long-threshold --cash]` — prints the per-fold table + pooled metrics + trading translation + leak warning |
 | C9 | `BacktestRun` model + migration (stores params + results JSON for the UI) | ✅ | `backtesting/migrations/0001_initial.py` — `Backtest` + `BacktestRun` + `BacktestFold` + `BacktestPrediction` + `BacktestTrade`; `0002` adds `fit_mode` + `training_run` FK |
 | C10 | End-to-end test: `naive` vs `ridge` walk-forward on fixture data; skill score computed | ✅ | `test_engine.py` — both run to `success`, `skill_vs_naive` in aggregate metrics |
 | C11 | `frozen_artifact` fit mode: backtest a `modeling`-trained artifact without retraining | ✅ | `engine._score_frozen` — `joblib.load` latest/pinned artifact, feature/target-spec guard, score sessions strictly after `trained_at` as one pseudo-fold; `test_frozen.py` (5 tests) |
@@ -291,3 +305,25 @@ Validation: 213 tests passing; Django check, migration check, black, isort and r
   `marketdata/tests/test_nav.py`); full suite 298 passed, 6 skipped;
   black/isort/ruff + Django check clean. Still separate from the pending
   forecasting dashboard (D1-D10).
+
+- 2026-09-06 - Phase C for the strict `forecasting` path: new
+  `forecasting/backtesting/` package. `walkforward.generate_folds` (pure,
+  row-position windows, expanding/rolling, `gap` embargo, `max(train) <
+  min(test)` asserted per fold); `engine.walk_forward` assembles the
+  point-in-time `TrainingFrame` once, then per fold instantiates the
+  predictor class fresh, drops training rows whose label wasn't observable
+  before the fold's first test decision, `fit()`s on that slice only, and
+  scores a label-free `PredictionFrame` - returns a `WalkForwardResult`
+  (per-fold `FoldReport`s, pooled predictions/metrics/`naive_metrics`/
+  `trading`, `skipped_folds`). `metrics.regression_scores` (MAE/RMSE/MAPE/
+  R2 + directional accuracy + skill-vs-naive) and `metrics.trading_translation`
+  (long-if-up, cost bps, equity curve, Sharpe/drawdown/hit rate).
+  `engine.looks_leaky` heuristic canary + `backtest_predictor` management
+  command. `sarima`/`ets` folds are skipped unless `--gap 0` (prefix-replay
+  contract). No result persistence / dashboard runner for this path yet.
+  10 tests (`forecasting/tests/test_walk_forward.py`: 40-config fold-
+  disjointness fuzz, metrics units, naive/ridge end-to-end, future-peeking
+  predictor flagged); `forecasting` suite 64 passed / 6 skipped, full suite
+  308 passed / 6 skipped; black/isort/ruff + Django check clean. Informed by
+  the knowledge-base pattern `ml/configurable-model-training.md` (fresh
+  pipeline per split, availability guard, never-raise orchestration).
