@@ -44,6 +44,12 @@ class Command(BaseCommand):
         parser.add_argument("--long-threshold", type=float, default=0.0)
         parser.add_argument("--cost-bps", type=float, default=0.0)
         parser.add_argument("--cash", type=float, default=100_000.0)
+        parser.add_argument(
+            "--save",
+            action="store_true",
+            help="Persist the run as a forecasting.ForecastBacktestRun row and print its id.",
+        )
+        parser.add_argument("--name", default="", help="Optional label for a --save'd run.")
 
     def handle(self, *args, **opts):
         if opts["predictor_key"] not in registered_keys():
@@ -65,6 +71,40 @@ class Command(BaseCommand):
             if opts["providers"].strip().lower() == "none"
             else [p.strip() for p in opts["providers"].split(",") if p.strip()]
         )
+
+        if opts["save"]:
+            from forecasting.services import run_forecast_backtest
+
+            run = run_forecast_backtest(
+                predictor_key=opts["predictor_key"],
+                symbol=opts["symbol"],
+                start=start,
+                end=end,
+                params=params,
+                scheme=opts["scheme"],
+                train_span=opts["train_span"],
+                test_span=opts["test_span"],
+                step=opts["step"],
+                gap=opts["gap"],
+                provider_keys=providers,
+                exchange=opts["exchange"],
+                exchange_timezone=opts["timezone"],
+                allow_short=opts["allow_short"],
+                long_threshold=opts["long_threshold"],
+                cost_bps=opts["cost_bps"],
+                initial_cash=opts["cash"],
+                name=opts["name"],
+            )
+            if run.status != run.Status.SUCCESS:
+                raise CommandError(f"backtest run #{run.pk} failed: {run.error}")
+            self.stdout.write(
+                self.style.SUCCESS(
+                    f"saved ForecastBacktestRun #{run.pk}: {run.n_folds} folds, "
+                    f"{run.n_predictions} OOS rows, skill_vs_naive={run.skill_vs_naive}"
+                    + ("  [LEAKY]" if run.looks_leaky else "")
+                )
+            )
+            return
 
         try:
             result = walk_forward(
