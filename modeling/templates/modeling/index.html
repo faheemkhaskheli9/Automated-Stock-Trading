@@ -1,0 +1,33 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'modeling/modeling.css' %}">
+<main>
+  <div class="intro">
+    <div><p class="eyebrow">MODELING</p><h1>Trading models</h1><p class="muted">Configure an estimator, its inputs and its output; train it; use it for prediction.</p></div>
+    <div><a class="primary" href="{% url 'modeling:create' %}">New model</a> <a class="secondary" href="{% url 'modeling:estimators' %}">Estimator catalogue</a></div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Name</th><th>Estimator</th><th>Task</th><th>Target</th><th>Instruments</th><th>Trained</th><th>Holdout</th><th>Active</th></tr></thead>
+      <tbody>
+      {% for m in models %}
+        <tr>
+          <td><a href="{% url 'modeling:detail' m.pk %}">{{ m.name }}</a></td>
+          <td>{{ m.estimator_key }}</td>
+          <td>{{ m.task }}</td>
+          <td>{{ m.target_spec.type }}</td>
+          <td>{{ m.instruments.count }}</td>
+          <td>{% if m.trained_at %}{{ m.trained_at|date:"Y-m-d H:i" }}{% else %}&mdash;{% endif %}</td>
+          <td>{% with h=m.metrics.holdout %}{% if h.mae %}MAE {{ h.mae|floatformat:3 }}{% elif h.accuracy %}acc {{ h.accuracy|floatformat:3 }}{% else %}&mdash;{% endif %}{% endwith %}</td>
+          <td>{% if m.is_active %}yes{% else %}no{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="empty">No models yet. <a href="{% url 'modeling:create' %}">Create one</a>.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

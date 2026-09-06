@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from django.contrib.auth import get_user_model
@@ -6,9 +6,12 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from backtesting.models import Backtest, BacktestRun
 from execution.models import Order
 from marketdata.models import Instrument, PriceBar
+from modeling.models import ModelPrediction, TradingModel
 from portfolio.models import Account, Position
+from research.models import NewsItem, ResearchSnapshot
 from strategies.models import Strategy
 
 
@@ -129,6 +132,110 @@ class OrderApiTests(APITestCase):
 
         self.assertEqual(response.data["count"], 1)
         self.assertIn("trades", response.data["results"][0])
+
+
+class ResearchForecastingApiTests(APITestCase):
+    """Phase 7 read endpoints - operator-global, auth required, not owner-scoped."""
+
+    def setUp(self):
+        self.engro = Instrument.objects.create(symbol="ENGRO")
+        self.luck = Instrument.objects.create(symbol="LUCK")
+        NewsItem.objects.create(
+            symbol="ENGRO",
+            headline="Engro posts record profit",
+            url="https://example.com/a",
+            url_hash="hash-a",
+            published_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            sentiment=0.6,
+        )
+        NewsItem.objects.create(
+            symbol="LUCK",
+            headline="Lucky Cement expands",
+            url="https://example.com/b",
+            url_hash="hash-b",
+            published_at=datetime(2026, 1, 3, tzinfo=timezone.utc),
+        )
+        ResearchSnapshot.objects.create(
+            symbol="ENGRO",
+            as_of=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            features={"rsi_14": 55.0},
+            provider_keys=["technical"],
+        )
+        self.model = TradingModel.objects.create(
+            name="Ridge-1", estimator_key="ridge", is_active=False
+        )
+        ModelPrediction.objects.create(
+            model=self.model,
+            instrument=self.engro,
+            as_of=datetime(2026, 1, 2, tzinfo=timezone.utc),
+            target_date=date(2026, 1, 3),
+            predicted_value=101.5,
+        )
+        self.backtest = Backtest.objects.create(name="BT-1", model=self.model)
+        BacktestRun.objects.create(backtest=self.backtest, status=BacktestRun.Status.SUCCESS)
+
+    def test_all_endpoints_require_authentication(self):
+        for name in (
+            "newsitem-list",
+            "researchsnapshot-list",
+            "modelprediction-list",
+            "tradingmodel-list",
+            "backtest-list",
+            "backtestrun-list",
+        ):
+            self.assertEqual(self.client.get(reverse(name)).status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_authenticated_user_sees_global_rows(self):
+        self.client.force_authenticate(make_user())
+
+        self.assertEqual(self.client.get(reverse("newsitem-list")).data["count"], 2)
+        self.assertEqual(self.client.get(reverse("researchsnapshot-list")).data["count"], 1)
+        self.assertEqual(self.client.get(reverse("modelprediction-list")).data["count"], 1)
+        self.assertEqual(self.client.get(reverse("backtest-list")).data["count"], 1)
+
+    def test_symbol_filter(self):
+        self.client.force_authenticate(make_user())
+
+        response = self.client.get(reverse("newsitem-list"), {"symbol": "engro"})
+        self.assertEqual(response.data["count"], 1)
+        self.assertEqual(response.data["results"][0]["symbol"], "ENGRO")
+
+        response = self.client.get(reverse("modelprediction-list"), {"symbol": "luck"})
+        self.assertEqual(response.data["count"], 0)
+
+    def test_backtest_nests_runs(self):
+        self.client.force_authenticate(make_user())
+        response = self.client.get(reverse("backtest-list"))
+        self.assertEqual(len(response.data["results"][0]["runs"]), 1)
+
+    def test_trading_model_is_active_toggle(self):
+        self.client.force_authenticate(make_user())
+        url = reverse("tradingmodel-detail", args=[self.model.id])
+
+        response = self.client.patch(url, {"is_active": True}, format="json")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.model.refresh_from_db()
+        self.assertTrue(self.model.is_active)
+
+    def test_trading_model_config_is_read_only(self):
+        self.client.force_authenticate(make_user())
+        url = reverse("tradingmodel-detail", args=[self.model.id])
+
+        self.client.patch(url, {"estimator_key": "elasticnet"}, format="json")
+
+        self.model.refresh_from_db()
+        self.assertEqual(self.model.estimator_key, "ridge")
+
+    def test_trading_model_cannot_be_deleted(self):
+        self.client.force_authenticate(make_user())
+        url = reverse("tradingmodel-detail", args=[self.model.id])
+        self.assertEqual(self.client.delete(url).status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_predictions_are_read_only(self):
+        self.client.force_authenticate(make_user())
+        response = self.client.post(reverse("modelprediction-list"), {}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 class PriceBarApiTests(APITestCase):

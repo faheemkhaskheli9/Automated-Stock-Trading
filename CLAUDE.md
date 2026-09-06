@@ -175,15 +175,23 @@ activate the venv first):
   only - no create/delete). `PositionSerializer` computes `market_value`/`unrealized_pnl` on
   the fly (not stored). There's no separate frontend - Django admin is the operational
   dashboard, per `docs/PLAN.md`.
+  - Phase 7 read endpoints (E1) expose the research/forecasting data, all
+    operator-global (no `OwnerScopedMixin`, plain `IsAuthenticated` reads):
+    `news`/`research-snapshots`/`predictions` (`modeling.ModelPrediction`) and
+    `backtests`/`backtest-runs` (`backtesting` models) are list/retrieve only;
+    `trading-models` (`modeling.TradingModel`) is GET/PATCH with only `is_active`
+    writable, mirroring `StrategyViewSet`. `news`/`research-snapshots`/`predictions`
+    take `?symbol=` (shared `SymbolFilterMixin`, `symbol_lookup` ORM path).
 
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.
 
-## Forecasting foundation (Phase 7, B1-B6 complete)
+## Forecasting foundation (Phase 7, B1-B9 complete)
 
 `research` supplies technical/news/fundamental/social features. The new
-`forecasting` app registers `naive` and `drift` predictors through
-`apps.ready()`. `TrainingFrame` separates future labels and label-availability
+`forecasting` app registers `naive`, `drift`, `sarima`, `ets`, `ridge`,
+`elasticnet` and `gradient_boosting` predictors through
+`apps.ready()` (plus `lstm` when the optional `torch` extra is installed). `TrainingFrame` separates future labels and label-availability
 timestamps from `PredictionFrame` inputs. `assemble_training_frame` retains
 warmup history but only labels observable by its aware `end` timestamp.
 Daily bars and date-only fundamental releases become usable at the next local
@@ -195,7 +203,103 @@ training command or walk-forward evaluation is implemented yet.
 
 Usage and limitations: `docs/FORECASTING.md`. Keep `docs/TASKS.md` updated;
 B6 adds `sarima`/`ets` statistical predictors with training-only parameter fits and prefix replay.
-B7 (Ridge/ElasticNet) is next. See `docs/FORECASTING.md` for replay requirements.
+B7 (`forecasting/linear.py`) adds `ridge`/`elasticnet` over the full point-in-time feature frame:
+next-return target rebuilt to a close, imputer+scaler fit inside an sklearn `Pipeline`, feature
+schema pinned at fit, row-independent prediction (no prefix replay). B8 (`forecasting/trees.py`)
+adds `gradient_boosting` (`HistGradientBoostingRegressor`) over the same frame; B7 and B8 share
+`forecasting/_frame_model.py::FrameModelPredictor` (the tree path skips the imputer/scaler stage
+since HGB handles NaNs natively). B9 (`forecasting/deep.py`) adds the optional `lstm` predictor -
+another `FrameModelPredictor` subclass (median imputer -> sklearn-wrapped `nn.LSTM` over the last
+`lookback` rows); `torch` is soft-imported from `requirements-ml.txt` and nothing registers when
+it is absent. Next: C-phase walk-forward over the `forecasting` predictors. See
+`docs/FORECASTING.md`.
+
+## `modeling` app (Phase 7, configurable-model studio)
+
+Separate from `forecasting` (which stays the leakage-strict next-day-close
+path). `modeling` is the UI-driven studio: a `TradingModel` row is an
+estimator key + `feature_spec` (JSON list) + `target_spec` (JSON dict) +
+instruments + train window; it trains to a joblib artifact under
+`settings.MODEL_ARTIFACT_DIR` (default `<repo>/artifacts/models/`,
+gitignored) and predicts into persisted `ModelPrediction` rows with
+actual-value backfill.
+
+- `estimators.py`/`deep.py`: `@register_estimator` registry (mirrors
+  `strategies/registry.py`), populated in `apps.ready()`. sklearn linear /
+  trees / `mlp` + trivial baselines (`naive_last`/`drift`/`seasonal_naive`,
+  which read an `ohlc` close-lag column); `lstm` needs the optional
+  `requirements-ml.txt` torch extra and is otherwise "unavailable".
+- `features.py`: point-in-time feature builder - `ohlc`/`return`/`technical`
+  (from `research`)/`research`/`strategy_signal` (a `strategies` `Strategy`
+  or key, mapped to {-1,0,1})/`manual_signal`/`calendar`. `validate_spec`
+  is Django-import-free so `TradingModel.clean()` stays cheap.
+- `targets.py`: `horizon_close`/`horizon_return`/`direction`/
+  `weekday_anchored` (Mon->Fri same week)/`multistep`. "Next local
+  midnight" label availability, same as `forecasting`. `predict` needs an
+  explicit `target_date` except for `weekday_anchored`.
+- `dataset.py`: pooled X/y across the model's instruments; trailing
+  time-ordered holdout (single split - **not** walk-forward); a row is kept
+  only if its label was observable by `train_end`.
+- `training.py` (`train_model`) never raises - records a `ModelTrainingRun`.
+  `prediction.py` (`predict`, `backfill_actuals`). `services.py` is the thin
+  wrapper used by views/commands/tasks.
+- Commands: `train_model`, `predict_model`, `backfill_actuals`. Tasks
+  (`tasks.py`, unscheduled): `train_model_task`, `run_model_predictions`,
+  `backfill_prediction_actuals`.
+- UI under `/modeling/` (FBVs, extends `marketdata/base.html`). Adds
+  `scikit-learn` to `requirements.txt`.
+
+Usage and the full feature/target reference: `docs/MODELING.md`.
+
+## `backtesting` app (Phase 7, walk-forward evaluation)
+
+Walk-forward backtesting of a `modeling.TradingModel` - the repeated-retrain-
+through-time view the `modeling` app's single trailing holdout can't give,
+plus a forecast -> trade -> equity-curve translation. Routed at `/backtests/`
+(NOT `/backtesting/`, which is the in-progress `strategies` UI). Adds no new
+dependencies.
+
+- `models.py`: `Backtest` (config: which model, `fit_mode`
+  `walk_forward`/`frozen_artifact`, optional `training_run` FK (pins an
+  artifact for `frozen_artifact`), `scheme` `expanding`/`rolling`,
+  `train_span`/`test_span`/`step`/`gap` in *sessions with data*,
+  `long_threshold`/`allow_short` position rule, cost bps, cash;
+  `clean()` rejects targets other than `horizon_close`/`horizon_return`/
+  `direction`, and requires a trained artifact when `fit_mode` is
+  `frozen_artifact`; `.artifact_path` resolves the pinned run's path or the
+  model's latest), `BacktestRun` (execution row, mirrors
+  `modeling.ModelTrainingRun` - never-raises, records `status`/`error`),
+  `BacktestFold`, `BacktestPrediction` (pooled OOS predicted-vs-actual),
+  `BacktestTrade`.
+- `walkforward.py`: pure `generate_folds()` - marches `(train, test)` windows
+  forward, asserts `train_end < test_start` with a `gap` embargo every fold.
+- `engine.py` (`run_backtest`): reuses `modeling.dataset.build_dataset`
+  (point-in-time X/y/anchor/available_at), `modeling.metrics.*` (accuracy) and
+  `strategies.backtesting.engine.BacktestResult` (CAGR/drawdown/Sharpe/win
+  rate). `_execute` picks a scorer by `fit_mode`: `_score_walk_forward` fits a
+  fresh `modeling.training.build_pipeline` per fold and drops any training row
+  whose label wasn't observable before that fold's first test decision;
+  `_score_frozen` `joblib.load`s the model's stored artifact, checks
+  `feature_names`/`target_spec` still match, and scores every row dated
+  strictly after the artifact's training cut-off (`min(trained_at, train_end)`,
+  both recorded in the artifact by `modeling.training`; pre-existing artifacts
+  fall back to the live `TradingModel.train_end`) as one pseudo-fold - and
+  builds that scoring dataset out to today, not capped at `model.train_end`, so
+  a model trained on a past window still has sessions left to score. Both feed
+  the same forecast->position->equity tail. Persists everything; failures land
+  on the run.
+- `metrics.py`: `positions_from_forecast` + per-instrument
+  `simulate_instrument` (all-in/all-out, cost on every position change) +
+  `combine_equity_curves` (equal cash split, forward-filled union).
+- `services.py` (deferred-import wrapper), `tasks.py` (`run_backtest_task`,
+  `run_active_backtests` - unscheduled),
+  `management/commands/backtest_model.py` (`--fit-mode` / `--training-run`
+  plus the window flags override stored config for one run), `admin.py`
+  (all 5 models), UI under `/backtests/` (FBVs extending
+  `marketdata/base.html`).
+
+Usage, leakage guarantees and v1 limitations: `docs/BACKTESTING.md`. This
+covers the intent of `docs/TASKS.md` Phase C for the `modeling` studio path.
 
 ## Deployment
 

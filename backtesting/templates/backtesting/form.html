@@ -1,0 +1,24 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
+<main>
+  <div class="intro"><div><p class="eyebrow">BACKTESTING</p><h1>{% if instance %}Edit backtest{% else %}New backtest{% endif %}</h1><p class="muted">Fold windows are counted in trading sessions with data.</p></div><div><a class="secondary" href="{% url 'backtesting:index' %}">Back</a></div></div>
+  <form method="post" class="panel controls bt-form">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      {% if field.name == 'fit_mode' %}<h2 class="section">Fit mode</h2><p class="muted">Pick <strong>frozen_artifact</strong> to score a model you already trained in the modeling app; <strong>walk_forward</strong> retrains every fold and ignores the artifact.</p>{% endif %}
+      {% if field.name == 'scheme' %}<h2 class="section">Walk-forward fold windows</h2><p class="muted">Ignored in frozen-artifact mode.</p>{% endif %}
+      {% if field.name == 'long_threshold' %}<h2 class="section">Position rule &amp; costs</h2>{% endif %}
+      <div class="field-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <button class="primary" type="submit">Save backtest</button>
+  </form>
+</main>
+{% endblock %}

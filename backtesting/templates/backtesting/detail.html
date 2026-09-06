@@ -1,0 +1,103 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'backtesting/backtesting.css' %}">
+<main>
+  <div class="intro">
+    <div><p class="eyebrow">BACKTEST</p><h1>{{ backtest.name }}</h1><p class="muted">{{ backtest.model.name }} &middot; {{ backtest.get_fit_mode_display }} &middot; {{ backtest.get_scheme_display }} &middot; target: {{ backtest.target_type }}</p></div>
+    <div>
+      <a class="secondary" href="{% url 'backtesting:edit' backtest.pk %}">Edit</a>
+      {% if latest %}<a class="secondary" href="?export=csv">Predictions CSV</a>{% endif %}
+      <form method="post" style="display:inline"><input type="hidden" name="action" value="run">{% csrf_token %}<button class="primary" type="submit">Run backtest</button></form>
+    </div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+  {% if latest and latest.status == 'failed' %}<div class="notice error">Last run failed: {{ latest.error }}</div>{% endif %}
+
+  <div class="panel controls">
+    <h2>Configuration</h2>
+    <p class="muted">Instruments: {% for i in backtest.model.instruments.all %}{{ i.symbol }}{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}</p>
+    {% if backtest.fit_mode == 'frozen_artifact' %}
+    <pre class="spec">fit_mode     = frozen_artifact   (scores the trained artifact; fold windows below are ignored)
+training_run = {{ backtest.training_run_id|default:"(model's latest artifact)" }}
+artifact     = {{ backtest.artifact_path|default:"(none - train the model first)" }}
+trained_at   = {{ backtest.model.trained_at|default:"(never trained)" }}
+model train_end = {{ backtest.model.train_end|default:"(none - trained through today)" }}
+date range   = {{ backtest.start|default:"(training cut-off)" }} &rarr; {{ backtest.end|default:"(today)" }}
+long_threshold = {{ backtest.long_threshold }}   allow_short = {{ backtest.allow_short }}
+costs        = {{ backtest.commission_bps }} bps commission + {{ backtest.slippage_bps }} bps slippage   cash = {{ backtest.initial_cash }}</pre>
+    <p class="muted">Only sessions after the earlier of <code>trained_at</code> and the model's <code>train_end</code> are scored - those are genuinely out-of-sample for this artifact.</p>
+    {% else %}
+    <pre class="spec">fit_mode     = walk_forward   (retrains a fresh pipeline every fold)
+scheme       = {{ backtest.scheme }}
+train_span   = {{ backtest.train_span }}   test_span = {{ backtest.test_span }}   step = {{ backtest.step }}   gap = {{ backtest.gap }}
+date range   = {{ backtest.start|default:"(all)" }} &rarr; {{ backtest.end|default:"(model train_end)" }}
+long_threshold = {{ backtest.long_threshold }}   allow_short = {{ backtest.allow_short }}
+costs        = {{ backtest.commission_bps }} bps commission + {{ backtest.slippage_bps }} bps slippage   cash = {{ backtest.initial_cash }}</pre>
+    {% endif %}
+  </div>
+
+  {% if latest and latest.status == 'success' %}
+  {% with acc=latest.metrics.accuracy tr=latest.metrics.trading %}
+  <div class="panel">
+    <h2 style="padding:18px 20px 0">Aggregate ({{ latest.n_folds }} folds, {{ latest.n_predictions }} predictions)</h2>
+    <div class="metric-cards">
+      <div class="card"><div class="k">MAE</div><div class="v">{{ acc.mae|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Dir. acc</div><div class="v">{{ acc.directional_accuracy|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Skill vs naive</div><div class="v">{{ acc.skill_vs_naive|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Accuracy</div><div class="v">{{ acc.accuracy|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Total return</div><div class="v">{{ tr.total_return|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">CAGR</div><div class="v">{{ tr.cagr|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Max drawdown</div><div class="v">{{ tr.max_drawdown|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Sharpe</div><div class="v">{{ tr.sharpe|floatformat:2|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Win rate</div><div class="v">{{ tr.win_rate|floatformat:3|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Trades</div><div class="v">{{ tr.num_trades|default:0 }}</div></div>
+    </div>
+  </div>
+  {% endwith %}
+
+  {% if equity %}
+  <div class="panel chart">
+    <h2 style="padding:18px 20px 0">Portfolio equity</h2>
+    <svg viewBox="0 0 1000 240" preserveAspectRatio="none" style="width:100%;height:240px">
+      <polyline fill="none" stroke="#137c5b" stroke-width="2" points="{{ equity }}"/>
+    </svg>
+  </div>
+  {% endif %}
+
+  {% if chart %}
+  <div class="panel chart">
+    <h2 style="padding:18px 20px 0">Predicted vs actual (out-of-sample)</h2>
+    <svg viewBox="0 0 1000 240" preserveAspectRatio="none" style="width:100%;height:240px">
+      <polyline fill="none" stroke="#137c5b" stroke-width="2" points="{{ chart.actual }}"/>
+      <polyline fill="none" stroke="#c07a1e" stroke-width="2" stroke-dasharray="5 4" points="{{ chart.predicted }}"/>
+    </svg>
+    <p class="muted" style="padding:0 20px 16px">Green = actual, dashed amber = predicted.</p>
+  </div>
+  {% endif %}
+
+  <div class="panel table-scroll">
+    <h2 style="padding:18px 20px 0">Folds</h2>
+    <table>
+      <thead><tr><th>#</th><th>Train</th><th>Test</th><th>n train</th><th>n test</th><th>MAE</th><th>Dir. acc</th><th>Skill</th><th>Accuracy</th></tr></thead>
+      <tbody>
+      {% for f in folds %}
+        <tr><td>{{ f.fold_index }}</td><td>{{ f.train_start }} &rarr; {{ f.train_end }}</td><td>{{ f.test_start }} &rarr; {{ f.test_end }}</td><td>{{ f.n_train }}</td><td>{{ f.n_test }}</td><td>{{ f.metrics.mae|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.directional_accuracy|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.skill_vs_naive|floatformat:3|default:"&mdash;" }}</td><td>{{ f.metrics.accuracy|floatformat:3|default:"&mdash;" }}</td></tr>
+      {% empty %}<tr><td colspan="9" class="empty">No folds.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="panel table-scroll">
+    <h2 style="padding:18px 20px 0">Runs</h2>
+    <table>
+      <thead><tr><th>#</th><th>Status</th><th>Started</th><th>Folds</th><th>Predictions</th><th>Trades</th><th>Error</th></tr></thead>
+      <tbody>
+      {% for r in runs %}<tr><td>{{ r.pk }}</td><td>{{ r.status }}</td><td>{{ r.started_at|date:"Y-m-d H:i" }}</td><td>{{ r.n_folds|default:"&mdash;" }}</td><td>{{ r.n_predictions|default:"&mdash;" }}</td><td>{{ r.n_trades|default:"&mdash;" }}</td><td>{{ r.error|truncatechars:80 }}</td></tr>
+      {% empty %}<tr><td colspan="7" class="empty">Not run yet.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

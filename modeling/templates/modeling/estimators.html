@@ -1,0 +1,24 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'modeling/modeling.css' %}">
+<main>
+  <div class="intro"><div><p class="eyebrow">MODELING</p><h1>Estimator catalogue</h1><p class="muted">Every registered model type. "Unavailable" means a required optional dependency is missing.</p></div><div><a class="secondary" href="{% url 'modeling:index' %}">Back</a></div></div>
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Key</th><th>Name</th><th>Task</th><th>Available</th><th>Scaling</th><th>Multi-output</th><th>Params (name: default)</th></tr></thead>
+      <tbody>
+      {% for e in estimators %}
+        <tr>
+          <td>{{ e.key }}</td><td>{{ e.display_name }}</td><td>{{ e.task }}</td>
+          <td>{% if e.available %}yes{% else %}<span class="flag">no</span>{% endif %}</td>
+          <td>{% if e.needs_scaling %}yes{% else %}no{% endif %}</td>
+          <td>{% if e.multioutput %}native{% else %}wrapped{% endif %}</td>
+          <td>{% for name, meta in e.param_schema.items %}{{ name }}: {{ meta.default }}{% if not forloop.last %} &middot; {% endif %}{% empty %}&mdash;{% endfor %}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

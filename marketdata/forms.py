@@ -6,7 +6,14 @@ class HistoryForm(forms.Form):
     symbol = forms.RegexField(
         regex=r"^[A-Za-z0-9][A-Za-z0-9.-]{0,31}$",
         max_length=32,
-        widget=forms.TextInput(attrs={"placeholder": "e.g. OGDC", "autocomplete": "off"}),
+        widget=forms.TextInput(
+            attrs={
+                "placeholder": "Choose or type a symbol",
+                "autocomplete": "off",
+                "list": "available-symbols",
+                "aria-describedby": "symbol-help",
+            }
+        ),
     )
     start = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))
     end = forms.DateField(required=False, widget=forms.DateInput(attrs={"type": "date"}))

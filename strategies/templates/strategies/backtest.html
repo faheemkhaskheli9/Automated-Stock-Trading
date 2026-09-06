@@ -1,0 +1,28 @@
+{% extends 'marketdata/base.html' %}
+{% load static %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'strategies/backtest.css' %}">
+<main>
+  <div class="intro"><div><span class="eyebrow">STRATEGY RESEARCH / BACKTESTING</span><h1>Test your edge.</h1><p class="muted">Replay trading models against your stored market history.</p></div><a class="secondary" href="{% url 'marketdata:dashboard' %}">Market data ↗</a></div>
+  <div class="backtest-layout">
+    <form method="post" class="panel setup">{% csrf_token %}<h2>Configure a backtest</h2><p class="muted">Daily bars · Long only · PKR</p>{{ form.non_field_errors }}
+      {% for field in form %}<div class="setup-field">{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endfor %}
+      <p class="muted">Fast / slow periods apply to the crossover model. Saved models use their configured parameters. 1 bp = 0.01%; costs apply on each fill.</p>
+      <button class="primary" type="submit">Run backtest →</button>
+      {% if result %}<button class="secondary" type="submit" name="export" value="csv">Export trades CSV</button>{% endif %}
+    </form>
+    <section class="detail" aria-live="polite">
+    {% if result %}
+      <div class="section-heading"><h2>{{ instrument.symbol }} <span class="muted">/ Backtest results</span></h2><span class="badge">{{ count }} DAILY BARS</span></div>
+      <div class="stats"><article class="panel"><p class="muted">Final equity · PKR</p><h2>{{ result.final_equity|floatformat:2 }}</h2></article><article class="panel"><p class="muted">Total return</p><h2>{{ return_pct|floatformat:2 }}%</h2></article><article class="panel"><p class="muted">Maximum drawdown</p><h2>{{ drawdown_pct|floatformat:2 }}%</h2></article></div>
+      <div class="panel chart"><div class="section-heading"><h2>Equity curve</h2><span class="muted">Marked to daily close · PKR</span></div><div class="chart-scale"><span>{{ chart_high|floatformat:0 }}</span><span>{{ chart_low|floatformat:0 }}</span></div><svg viewBox="0 0 1000 250" role="img" aria-label="Portfolio equity from {{ first|date:'Y-m-d' }} to {{ last|date:'Y-m-d' }}"><path d="M20 30H980 M20 125H980 M20 220H980" stroke="#edf1ee" fill="none"/><polyline points="{{ points }}" fill="none" stroke="#16856b" stroke-width="3" vector-effect="non-scaling-stroke"/></svg><div class="chart-dates"><span>{{ first|date:'M d, Y' }}</span><span>{{ last|date:'M d, Y' }}</span></div></div>
+      <div class="stats"><article class="panel"><p class="muted">Closed trades</p><h2>{{ result.num_trades }}</h2></article><article class="panel"><p class="muted">Win rate</p><h2>{% if win_pct != None %}{{ win_pct|floatformat:1 }}%{% else %}—{% endif %}</h2></article><article class="panel"><p class="muted">Annualized Sharpe · 252 sessions</p><h2>{{ result.sharpe|floatformat:2|default:'—' }}</h2></article></div>
+      <div class="panel"><div class="section-heading"><h2>Trade ledger</h2><span class="muted">Latest 200 · Net of commission</span></div><div class="table-scroll"><table><thead><tr><th>Entry / Exit</th><th>Shares</th><th>Entry price</th><th>Exit price</th><th>Fees</th><th>Net P&amp;L</th></tr></thead><tbody>{% for trade in trades %}<tr><td>{{ trade.entry_time|date:'Y-m-d' }}<br>{{ trade.exit_time|date:'Y-m-d' }}</td><td>{{ trade.shares }}</td><td>{{ trade.entry_price|floatformat:2 }}</td><td>{{ trade.exit_price|floatformat:2 }}</td><td>{{ trade.fees|floatformat:2 }}</td><td>{{ trade.pnl|floatformat:2 }}</td></tr>{% empty %}<tr><td colspan="6" class="empty">No closed trades in this period. Try a longer range or different model parameters.</td></tr>{% endfor %}</tbody></table></div></div>
+      <p class="muted">Open position: {{ result.open_position_shares }} shares, included at the last close. Signals fill at the next bar's open with slippage and commission. Final-bar signals are not filled. All available cash is used for whole shares. No dividends, corporate-action adjustments, volume limits, or live risk checks are applied. ML training must precede the test period.</p>
+    {% else %}
+      <div class="panel empty large"><span class="eyebrow">RESEARCH BEFORE EXECUTION</span><h1>A clearer view of your model.</h1><p>Choose an instrument and a strategy, set your trading costs,<br>then run a historical simulation.</p><p class="muted">Your results will include an equity curve, performance metrics,<br>and a downloadable ledger of completed trades.</p><a class="secondary" href="{% url 'marketdata:dashboard' %}">Import market history</a></div>
+    {% endif %}
+    </section>
+  </div>
+</main>
+{% endblock %}

@@ -9,6 +9,9 @@ __pycache__/
 # Django collectstatic output
 staticfiles/
 
+# modeling app - trained model artifacts (MODEL_ARTIFACT_DIR)
+artifacts/
+
 # Distribution / packaging
 .Python
 build/
