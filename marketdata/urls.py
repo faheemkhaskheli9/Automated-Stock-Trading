@@ -7,6 +7,7 @@ app_name = "marketdata"
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
     path("instruments/", views.instruments, name="instruments"),
+    path("instruments/<str:symbol>/", views.instrument_detail, name="instrument_detail"),
     path("sync/", views.sync_history, name="sync"),
     path(
         "login/",

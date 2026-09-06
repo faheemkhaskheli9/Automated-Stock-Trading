@@ -1,0 +1,64 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+<div class="intro">
+  <div>
+    <p class="eyebrow">PAKISTAN STOCK EXCHANGE</p>
+    <h1>{{ instrument.symbol }}</h1>
+    <p class="muted">{{ instrument.name|default:'PSX · Daily prices' }}{% if instrument.sector %} · {{ instrument.sector }}{% endif %}</p>
+  </div>
+  <div class="storage"><span class="dot"></span> Stored daily bars <strong>{{ bar_count }}</strong></div>
+</div>
+
+<p class="muted"><a class="secondary" href="{% url 'marketdata:instruments' %}">← All instruments</a>
+<a class="secondary" href="{% url 'marketdata:dashboard' %}?symbol={{ instrument.symbol|urlencode }}">Price history &amp; fetch ↗</a></p>
+
+<section class="stats">
+  <div class="panel"><p class="eyebrow">LATEST SAVED CLOSE</p><h2>{% if latest %}{{ latest.close|floatformat:2 }} <small>PKR</small>{% else %}—{% endif %}</h2><p class="muted">{{ latest.timestamp|date:'d M Y'|default:'No saved prices' }}</p></div>
+  <div class="panel"><p class="eyebrow">LATEST BAR O/H/L</p><h2>{% if latest %}{{ latest.open|floatformat:2 }} / {{ latest.high|floatformat:2 }} / {{ latest.low|floatformat:2 }}{% else %}—{% endif %}</h2><p class="muted">Volume {{ latest.volume|default:'—' }}</p></div>
+  <div class="panel"><p class="eyebrow">LATEST MODEL FORECAST</p><h2>{% if prediction %}{{ prediction.predicted_value|floatformat:2|default:'—' }}{% else %}—{% endif %}</h2><p class="muted">{% if prediction %}{{ prediction.model.name }} → {{ prediction.target_date|date:'d M Y' }}{% if prediction.actual_value is not None %} · actual {{ prediction.actual_value|floatformat:2 }}{% else %} · pending{% endif %}{% else %}No persisted prediction{% endif %}</p></div>
+</section>
+
+<section class="panel controls">
+  <form method="get">
+    <div class="fields">
+      <div>
+        <label for="days">History</label>
+        <select name="days" id="days">
+          {% for r in ranges %}<option value="{{ r }}"{% if r == days %} selected{% endif %}>{% if r %}{{ r }} days{% else %}All stored{% endif %}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label>Simple moving averages</label>
+        <div class="overlay-toggles">{% for p in overlay_periods %}<label class="chk"><input type="checkbox" name="sma" value="{{ p }}"{% if p in sma_periods %} checked{% endif %}> {{ p }}</label>{% endfor %}</div>
+      </div>
+      <div>
+        <label>Exponential moving averages</label>
+        <div class="overlay-toggles">{% for p in overlay_periods %}<label class="chk"><input type="checkbox" name="ema" value="{{ p }}"{% if p in ema_periods %} checked{% endif %}> {{ p }}</label>{% endfor %}</div>
+      </div>
+      <button class="primary" type="submit">Apply</button>
+    </div>
+  </form>
+</section>
+
+<section class="panel chart">
+  <div class="section-heading"><div><h2>Candlestick &amp; volume</h2><p class="muted">{{ shown }} session{{ shown|pluralize }} shown · daily OHLCV</p></div><span class="badge">PKR</span></div>
+  {% if candles %}
+  <div class="chart-scale"><span>{{ chart.hi|floatformat:2 }}</span><span>{{ chart.mid|floatformat:2 }}</span><span>{{ chart.lo|floatformat:2 }}</span></div>
+  <svg viewBox="0 0 1000 300" role="img" aria-label="Candlestick chart for {{ instrument.symbol }} from {{ chart.start|date:'d M Y' }} to {{ chart.end|date:'d M Y' }}">
+    <path d="M20 12H980 M20 131H980 M20 250H980" stroke="#e6ebe9" fill="none"/>
+    {% for c in candles %}
+    <line x1="{{ c.x|floatformat:2 }}" x2="{{ c.x|floatformat:2 }}" y1="{{ c.wick_top|floatformat:2 }}" y2="{{ c.wick_bottom|floatformat:2 }}" stroke="{% if c.up %}#0e9877{% else %}#d64545{% endif %}" stroke-width="1"/>
+    <rect x="{{ c.body_x|floatformat:2 }}" y="{{ c.body_y|floatformat:2 }}" width="{{ chart.body_w|floatformat:2 }}" height="{{ c.body_h|floatformat:2 }}" fill="{% if c.up %}#0e9877{% else %}#d64545{% endif %}"/>
+    <rect x="{{ c.body_x|floatformat:2 }}" y="{{ c.vol_y|floatformat:2 }}" width="{{ chart.body_w|floatformat:2 }}" height="{{ c.vol_h|floatformat:2 }}" fill="#c7d3cd"/>
+    {% endfor %}
+    {% for line in overlay_lines %}{% if line.points %}<polyline points="{{ line.points }}" fill="none" stroke="{{ line.color }}" stroke-width="1.6" stroke-linejoin="round"/>{% endif %}{% endfor %}
+  </svg>
+  <div class="chart-dates"><span>{{ chart.start|date:'d M Y' }}</span><span>{{ chart.end|date:'d M Y' }}</span></div>
+  {% if overlay_lines %}<div class="chart-legend">{% for line in overlay_lines %}<span><i style="background:{{ line.color }}"></i>{{ line.label }}</span>{% endfor %}</div>{% endif %}
+  {% else %}
+  <div class="empty large"><h2>No stored history for {{ instrument.symbol }}.</h2><p>Fetch its daily bars from <a href="{% url 'marketdata:dashboard' %}?symbol={{ instrument.symbol|urlencode }}">Market Data</a> first.</p></div>
+  {% endif %}
+</section>
+</main>
+{% endblock %}

@@ -8,7 +8,7 @@ from django.contrib.auth.decorators import login_required, permission_required
 from django.core.paginator import Paginator
 from django.db.models import Count, Max, Q
 from django.http import HttpResponse
-from django.shortcuts import redirect, render
+from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
@@ -150,6 +150,210 @@ def instruments(request):
             "query": params.urlencode(),
             "total": Instrument.objects.filter(exchange="PSX").count(),
         },
+    )
+
+
+# Indicator overlays the symbol-detail chart can draw over the candles. Only
+# these periods are accepted from the query string - anything else is ignored
+# rather than trusted straight into a rolling window.
+OVERLAY_PERIODS = (10, 20, 50, 100, 200)
+_SMA_COLORS = {10: "#d9822b", 20: "#0e9877", 50: "#2f6fce", 100: "#8b5cf6", 200: "#475569"}
+_EMA_COLORS = {10: "#e0563f", 20: "#0aa27a", 50: "#3b82f6", 100: "#a855f7", 200: "#64748b"}
+
+# Days-of-history choices for the detail chart; 0 means "everything stored".
+DETAIL_RANGES = (90, 180, 365, 0)
+_DEFAULT_RANGE = 180
+
+_PX = (20.0, 980.0)  # chart x-extent inside the 1000-wide viewBox
+_PY = (12.0, 250.0)  # price-area y-extent (top, bottom)
+_VY = (266.0, 300.0)  # volume-strip y-extent (top, bottom)
+
+
+def _sma(values, period):
+    """Simple moving average, aligned to ``values`` (None until enough history)."""
+    out = [None] * len(values)
+    if period <= 0:
+        return out
+    run = 0.0
+    for i, value in enumerate(values):
+        run += value
+        if i >= period:
+            run -= values[i - period]
+        if i >= period - 1:
+            out[i] = run / period
+    return out
+
+
+def _ema(values, period):
+    """Exponential moving average seeded with the first ``period``-bar SMA."""
+    out = [None] * len(values)
+    if period <= 0 or len(values) < period:
+        return out
+    prev = sum(values[:period]) / period
+    out[period - 1] = prev
+    k = 2.0 / (period + 1)
+    for i in range(period, len(values)):
+        prev = values[i] * k + prev * (1 - k)
+        out[i] = prev
+    return out
+
+
+def _polyline(series, window, lo, hi):
+    """Space ``series`` (already sliced to the visible window) across the chart
+    x-extent and map each value onto the price y-extent. Returns an SVG points
+    string, skipping leading bars that don't have a value yet."""
+    n = len(window)
+    span = hi - lo or 1.0
+    step = (_PX[1] - _PX[0]) / max(n - 1, 1)
+    parts = []
+    for i, value in enumerate(series):
+        if value is None:
+            continue
+        x = _PX[0] + i * step
+        y = _PY[1] - (value - lo) * (_PY[1] - _PY[0]) / span
+        parts.append(f"{x:.2f},{y:.2f}")
+    return " ".join(parts)
+
+
+@login_required(login_url="marketdata:login")
+@require_GET
+def instrument_detail(request, symbol):
+    """Candlestick + volume view for one saved PSX symbol, with optional
+    moving-average overlays toggled through the query string
+    (``?sma=20&sma=50&ema=20``) and a history-length selector (``?days=``)."""
+    instrument = get_object_or_404(Instrument, exchange="PSX", symbol=symbol)
+
+    try:
+        days = int(request.GET.get("days", _DEFAULT_RANGE))
+    except (TypeError, ValueError):
+        days = _DEFAULT_RANGE
+    if days not in DETAIL_RANGES:
+        days = _DEFAULT_RANGE
+
+    def _periods(name):
+        picked = []
+        for raw in request.GET.getlist(name):
+            try:
+                period = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if period in OVERLAY_PERIODS and period not in picked:
+                picked.append(period)
+        return sorted(picked)
+
+    sma_periods = _periods("sma")
+    ema_periods = _periods("ema")
+    max_period = max([*sma_periods, *ema_periods, 0])
+
+    all_bars = list(
+        instrument.price_bars.filter(timeframe=PriceBar.Timeframe.DAILY).order_by("timestamp")
+    )
+    # Keep enough extra leading history that the longest overlay is already
+    # "warm" at the left edge of the visible window.
+    if days:
+        window = all_bars[-days:]
+        calc_bars = all_bars[-(days + max_period) :] if max_period else window
+    else:
+        window = calc_bars = all_bars
+    offset = len(calc_bars) - len(window)
+
+    closes = [float(bar.close) for bar in calc_bars]
+    overlays = []
+    for period in sma_periods:
+        overlays.append(("sma", period, _SMA_COLORS[period], _sma(closes, period)[offset:]))
+    for period in ema_periods:
+        overlays.append(("ema", period, _EMA_COLORS[period], _ema(closes, period)[offset:]))
+
+    candles = []
+    latest = window[-1] if window else None
+    chart = None
+    if window:
+        lows = [float(bar.low) for bar in window]
+        highs = [float(bar.high) for bar in window]
+        lo, hi = min(lows), max(highs)
+        for _, _, _, series in overlays:
+            vals = [v for v in series if v is not None]
+            if vals:
+                lo, hi = min(lo, *vals), max(hi, *vals)
+        span = hi - lo or 1.0
+        n = len(window)
+        step = (_PX[1] - _PX[0]) / max(n - 1, 1)
+        body_w = max(1.5, step * 0.6)
+        max_vol = max((bar.volume for bar in window), default=0) or 1
+
+        def price_y(value):
+            return _PY[1] - (value - lo) * (_PY[1] - _PY[0]) / span
+
+        for i, bar in enumerate(window):
+            o, c = float(bar.open), float(bar.close)
+            top, bottom = price_y(max(o, c)), price_y(min(o, c))
+            vol_h = bar.volume / max_vol * (_VY[1] - _VY[0])
+            x = _PX[0] + i * step
+            candles.append(
+                {
+                    "x": x,
+                    "body_x": x - body_w / 2,
+                    "up": c >= o,
+                    "wick_top": price_y(float(bar.high)),
+                    "wick_bottom": price_y(float(bar.low)),
+                    "body_y": top,
+                    "body_h": max(bottom - top, 1.0),
+                    "vol_y": _VY[1] - vol_h,
+                    "vol_h": vol_h,
+                }
+            )
+        chart = {
+            "lo": lo,
+            "hi": hi,
+            "mid": (lo + hi) / 2,
+            "body_w": body_w,
+            "start": window[0].timestamp,
+            "end": window[-1].timestamp,
+        }
+
+    overlay_lines = [
+        {
+            "key": f"{kind}{period}",
+            "label": f"{kind.upper()} {period}",
+            "color": color,
+            "points": _polyline(series, window, chart["lo"], chart["hi"]),
+        }
+        for (kind, period, color, series) in overlays
+        if window
+    ]
+
+    prediction = None if latest is None else _latest_prediction(instrument)
+
+    return render(
+        request,
+        "marketdata/instrument_detail.html",
+        {
+            "instrument": instrument,
+            "candles": candles,
+            "chart": chart,
+            "overlay_lines": overlay_lines,
+            "latest": latest,
+            "bar_count": len(all_bars),
+            "shown": len(window),
+            "days": days,
+            "ranges": DETAIL_RANGES,
+            "overlay_periods": OVERLAY_PERIODS,
+            "sma_periods": sma_periods,
+            "ema_periods": ema_periods,
+            "prediction": prediction,
+        },
+    )
+
+
+def _latest_prediction(instrument):
+    """Most recent persisted modeling forecast for this instrument, or None."""
+    from modeling.models import ModelPrediction
+
+    return (
+        ModelPrediction.objects.filter(instrument=instrument)
+        .select_related("model")
+        .order_by("-target_date", "-created_at")
+        .first()
     )
 
 
