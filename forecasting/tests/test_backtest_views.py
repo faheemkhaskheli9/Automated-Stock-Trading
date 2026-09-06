@@ -13,6 +13,7 @@ import pytest
 from django.urls import reverse
 
 from forecasting.models import ForecastBacktestRun
+from forecasting.views import _pred_vs_actual
 from research.tests.factories import make_instrument, make_price_series
 
 pytestmark = pytest.mark.django_db
@@ -135,6 +136,23 @@ def test_history_too_short_records_failed_run_and_shows_message(client, user, hi
     assert run.status == ForecastBacktestRun.Status.FAILED
     assert "history too short" in run.error
     assert "failed" in resp.content.decode().lower()
+
+
+# --------------------------------------------------------------------------- #
+# predicted-vs-actual chart shares one y-axis
+# --------------------------------------------------------------------------- #
+def test_pred_vs_actual_uses_a_shared_scale():
+    # predicted is consistently ~5 below actual; on a shared axis the predicted
+    # polyline must sit strictly below (larger SVG y) the actual one at every
+    # point. Independent per-series scaling would stretch both to the full band.
+    preds = [{"predicted": a - 5.0, "actual": a} for a in (95.0, 100.0, 110.0, 103.0)]
+    chart = _pred_vs_actual(preds)
+
+    def ys(points):
+        return [float(pt.split(",")[1]) for pt in points.split()]
+
+    pred_y, act_y = ys(chart["predicted"]), ys(chart["actual"])
+    assert all(p > a for p, a in zip(pred_y, act_y))
 
 
 # --------------------------------------------------------------------------- #

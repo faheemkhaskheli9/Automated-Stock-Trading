@@ -59,17 +59,12 @@ def _run_forecast_backtest(**kwargs) -> ForecastBacktestRun:
     return _run(**kwargs)
 
 
-def _series_points(rows, key):
-    """Map a list of numbers to an SVG polyline in a 0..1000 x 0..240 box."""
-    vals = [r[key] for r in rows if isinstance(r.get(key), (int, float))]
-    if len(vals) < 2:
-        return ""
-    lo, hi = min(vals), max(vals)
-    span = (hi - lo) or 1.0
-    n = len(vals)
+def _polyline(values, lo, span):
+    """SVG polyline points for ``values`` on a shared ``lo``/``span`` y-scale."""
+    n = len(values)
     return " ".join(
         f"{20 + i * 960 / (n - 1):.1f},{220 - (v - lo) * 190 / span:.1f}"
-        for i, v in enumerate(vals)
+        for i, v in enumerate(values)
     )
 
 
@@ -82,24 +77,23 @@ def _pred_vs_actual(predictions):
     ]
     if len(scored) < 2:
         return ""
+    # Both lines must share one y-axis or the "predicted vs actual" comparison
+    # hides systematic bias - pool the two series before scaling.
+    vals = [v for p in scored for v in (p["predicted"], p["actual"])]
+    lo, hi = min(vals), max(vals)
+    span = (hi - lo) or 1.0
     return {
-        "predicted": _series_points(scored, "predicted"),
-        "actual": _series_points(scored, "actual"),
+        "predicted": _polyline([p["predicted"] for p in scored], lo, span),
+        "actual": _polyline([p["actual"] for p in scored], lo, span),
     }
 
 
 def _equity_points(curve):
-    pairs = [(d, v) for d, v in curve if isinstance(v, (int, float))]
-    if len(pairs) < 2:
+    vals = [v for _, v in curve if isinstance(v, (int, float))]
+    if len(vals) < 2:
         return ""
-    vals = [v for _, v in pairs]
     lo, hi = min(vals), max(vals)
-    span = (hi - lo) or 1.0
-    n = len(pairs)
-    return " ".join(
-        f"{20 + i * 960 / (n - 1):.1f},{220 - (v - lo) * 190 / span:.1f}"
-        for i, (_, v) in enumerate(pairs)
-    )
+    return _polyline(vals, lo, (hi - lo) or 1.0)
 
 
 @login_required(login_url="marketdata:login")
