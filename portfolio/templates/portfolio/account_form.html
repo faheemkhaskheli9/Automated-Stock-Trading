@@ -1,0 +1,26 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">PORTFOLIO</p>
+      <h1>{% if instance %}Edit account{% else %}New account{% endif %}</h1>
+      <p class="muted">Cash balance is the opening (or corrected) cash. Only paper broker is available today.</p>
+    </div>
+    <div><a class="secondary" href="{% url 'portfolio:account_list' %}">Back</a></div>
+  </div>
+  <form method="post" class="panel controls">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      <div class="field-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <button class="primary" type="submit">Save account</button>
+  </form>
+</main>
+{% endblock %}

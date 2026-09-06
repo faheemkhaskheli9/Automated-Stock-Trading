@@ -25,6 +25,7 @@ urlpatterns = [
     path("forecast-backtests/", include("forecasting.urls")),
     path("signals/", include("signalfeed.urls")),
     path("research/", include("research.urls")),
+    path("portfolio/", include("portfolio.urls")),
     path("", include("marketdata.urls")),
     path("admin/", admin.site.urls),
     path("api/", include("api.urls")),

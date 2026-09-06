@@ -33,8 +33,9 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
   admin / management commands into the server-rendered "PSX Observatory" UI,
   app by app (U1 `signalfeed` watchlist + run actions, U2 `strategies` config
   + manual signals, U3 `research` (`/research/` snapshots + sync + manual
-  fundamentals) done; U4 `portfolio`, U5 `execution` paper trading, U6 `risk`
-  + `User` profile pending). Plan:
+  fundamentals), U4 `portfolio` (`/portfolio/` owner-scoped account list /
+  detail / edit) done; U5 `execution` paper trading, U6 `risk` + `User`
+  profile pending). Plan:
   `C:\Users\LENOVO\.claude\plans\wondrous-brewing-starfish.md`. Paper-broker
   actions only - live trading stays gated (Phase 6).
 
@@ -151,6 +152,12 @@ activate the venv first):
 - `portfolio/` - `Account` (paper/live, cash_balance, `.equity` property = cash + mark-to-market
   positions) and `Position` (per account+instrument, unique together). `Account.broker` selects
   the `BrokerAdapter` (see `execution/brokers`) - only `"paper"` exists today.
+  - UI (Phase 9 U4): `/portfolio/` - `account_list` / `account_detail`
+    (positions with market value + unrealized P&L, computed like
+    `api.PositionSerializer`) / `account_edit` (`AccountForm`; `owner` from the
+    request, `(owner, name)` uniqueness checked in `clean_name`). **Owner-
+    scoped**: `_scoped(request)` filters to `request.user`'s accounts, staff
+    see all.
 - `risk/` - pre-trade checks, run before every order.
   - `checks.py`: `check_max_daily_loss` (against a `DailyEquitySnapshot` lazily captured the
     first time it's checked each day - not a separate scheduled job), `check_max_position_size`
