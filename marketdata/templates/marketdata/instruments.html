@@ -12,7 +12,7 @@
 <tbody>
 {% for row in rows %}
 <tr>
-<td><strong>{{ row.instrument.symbol }}</strong></td>
+<td><a href="{% url 'marketdata:instrument_detail' row.instrument.symbol %}"><strong>{{ row.instrument.symbol }}</strong></a></td>
 <td>{{ row.instrument.name|default:'—' }}</td>
 <td>{{ row.instrument.sector|default:'—' }}</td>
 <td>{% if row.last_bar %}<strong>{{ row.last_bar.close|floatformat:2 }}</strong>{% else %}—{% endif %}</td>
