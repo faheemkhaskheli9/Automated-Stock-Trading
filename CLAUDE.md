@@ -29,15 +29,17 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
   (watchlist + accuracy gate + email/webhook/Telegram push + Friday recap),
   built on the `modeling` studio's `weekday_anchored` target. See the per-app
   section below and `docs/SIGNALS_PLAN.md`.
-- **Phase 9 (in progress)**: operator UI - move every routine action off Django
+- **Phase 9 (done)**: operator UI - every routine action moved off Django
   admin / management commands into the server-rendered "PSX Observatory" UI,
-  app by app (U1 `signalfeed` watchlist + run actions, U2 `strategies` config
-  + manual signals, U3 `research` (`/research/` snapshots + sync + manual
-  fundamentals), U4 `portfolio` (`/portfolio/` owner-scoped account list /
-  detail / edit), U5 `execution` (`/trading/` orders + place paper order +
-  staff-only run-cycle) done; U6 `risk` + `User` profile pending). Plan:
+  app by app: U1 `signalfeed` watchlist + run actions, U2 `strategies` config
+  + manual signals (`/backtesting/strategies/`), U3 `research` (`/research/`
+  snapshots + sync + manual fundamentals), U4 `portfolio` (`/portfolio/`
+  owner-scoped account list / detail / edit), U5 `execution` (`/trading/`
+  orders + place paper order + staff-only run-cycle), U6 `risk` (`/risk/`
+  decisions + equity snapshots) + `User` profile (`/profile/`). Plan:
   `C:\Users\LENOVO\.claude\plans\wondrous-brewing-starfish.md`. Paper-broker
-  actions only - live trading stays gated (Phase 6).
+  actions only - live trading stays gated (Phase 6). Django admin remains the
+  power-user fallback.
 
 Key direction decisions (see `docs/PLAN.md` for the full rationale):
 - Market: PSX. No official free market-data API exists - the plan uses the `psxdata` scraper
@@ -93,6 +95,9 @@ activate the venv first):
   (`risk_tolerance`, `max_daily_loss_pct`, `max_position_size_pct`). Broker credentials are
   deliberately NOT here yet - they land once Phase 3's `BrokerAdapter` interface exists, and
   will be encrypted at rest rather than plain fields.
+  - UI (Phase 9 U6): `/profile/` (`app_name = "user"`) - `profile_edit`
+    (`UserProfileForm`, `get_or_create` on first visit) lets a user set their
+    own risk limits that feed `risk.engine.evaluate`.
 - `marketdata/` - PSX price data.
   - `models.py`: `Instrument` (symbol/exchange/sector), `PriceBar` (OHLCV, unique per
     instrument+timeframe+timestamp).
@@ -169,6 +174,8 @@ activate the venv first):
     `RiskDecision` audit row (approved or not) before returning.
   - This app does NOT know about `execution.Order` - the duplicate-order guard lives in
     `execution/services.py` instead, specifically to avoid a risk<->execution circular import.
+  - UI (Phase 9 U6): `/risk/` - read-only `decisions` + `equity_snapshots`
+    lists, owner-scoped (`account__owner`, staff see all).
 - `execution/` - orders and the trading cycle.
   - `models.py`: `Order` (full pending/submitted/filled/rejected/cancelled lifecycle, though
     `PaperBroker` resolves it synchronously in one call), `Trade` (a fill, separate from

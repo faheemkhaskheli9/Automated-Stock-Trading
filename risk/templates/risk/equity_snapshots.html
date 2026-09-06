@@ -1,0 +1,25 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">RISK</p>
+      <h1>Daily equity snapshots</h1>
+      <p class="muted">The opening-equity baseline each day's max-daily-loss check measures against. Captured lazily the first time it is needed.</p>
+    </div>
+    <div><a class="secondary" href="{% url 'risk:decisions' %}">Risk decisions</a></div>
+  </div>
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Date</th><th>Account</th><th>Opening equity</th></tr></thead>
+      <tbody>
+      {% for s in rows %}
+        <tr><td>{{ s.date|date:"Y-m-d" }}</td><td>{{ s.account.name }}</td><td>{{ s.opening_equity|floatformat:2 }}</td></tr>
+      {% empty %}
+        <tr><td colspan="3" class="empty">No snapshots yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

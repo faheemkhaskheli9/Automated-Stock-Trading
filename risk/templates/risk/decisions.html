@@ -1,0 +1,35 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<style>.ok{color:#3ecf8e}.no{color:#ff6b6b}</style>
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">RISK</p>
+      <h1>Risk decisions</h1>
+      <p class="muted">Every pre-trade evaluation, approved or not, with the reason. Written unconditionally by <code>risk.engine.evaluate</code>.</p>
+    </div>
+    <div><a class="secondary" href="{% url 'risk:equity_snapshots' %}">Equity snapshots</a></div>
+  </div>
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>When</th><th>Account</th><th>Instrument</th><th>Action</th><th>Qty</th><th>Approved</th><th>Reason</th><th>Strategy</th></tr></thead>
+      <tbody>
+      {% for d in rows %}
+        <tr>
+          <td>{{ d.created_at|date:"Y-m-d H:i" }}</td>
+          <td>{{ d.account.name }}</td>
+          <td>{{ d.instrument.symbol }}</td>
+          <td>{{ d.action }}</td>
+          <td>{{ d.quantity }}</td>
+          <td class="{% if d.approved %}ok{% else %}no{% endif %}">{{ d.approved|yesno:"yes,no" }}</td>
+          <td>{{ d.reason|default:"&mdash;" }}</td>
+          <td>{{ d.strategy.name|default:"&mdash;" }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="empty">No risk decisions recorded yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}
