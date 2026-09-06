@@ -1,0 +1,57 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<style>
+  .gate-pass{color:#3ecf8e}.gate-block{color:#ff6b6b}
+  .wl-actions{display:flex;gap:10px;align-items:center}
+  .wl-actions form{display:inline}
+</style>
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">SIGNAL FEED</p>
+      <h1>Watchlist</h1>
+      <p class="muted">Each row pairs an instrument with the model whose weekly forecast is delivered for it, plus the accuracy bar that model must clear to be sent live.</p>
+    </div>
+    <div class="wl-actions">
+      <a class="secondary" href="{% url 'signalfeed:index' %}">Back</a>
+      <a class="primary" href="{% url 'signalfeed:watch_create' %}">Add watch item</a>
+    </div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="panel table-scroll">
+    <table>
+      <thead>
+        <tr><th>Symbol</th><th>Model</th><th>Active</th><th>Min acc.</th><th>Min skill</th><th>Min move %</th><th>Gate</th><th></th></tr>
+      </thead>
+      <tbody>
+      {% for item, gate in rows %}
+        <tr>
+          <td>{{ item.instrument.symbol }}</td>
+          <td>{{ item.trading_model.name }}</td>
+          <td>{% if item.is_active %}yes{% else %}<span class="muted">no</span>{% endif %}</td>
+          <td>{{ item.min_directional_accuracy|floatformat:2 }}</td>
+          <td>{{ item.min_skill|floatformat:2 }}</td>
+          <td>{{ item.min_expected_move_pct|floatformat:2 }}</td>
+          <td class="{% if gate.passed %}gate-pass{% else %}gate-block{% endif %}">
+            {% if gate.passed %}pass{% else %}blocked{% endif %} &mdash; {{ gate.reason }}
+          </td>
+          <td class="wl-actions">
+            <a href="{% url 'signalfeed:watch_edit' item.pk %}">edit</a>
+            {% if item.is_active %}
+            <form method="post" action="{% url 'signalfeed:watch_delete' item.pk %}"
+              onsubmit="return confirm('Deactivate this watch item? Its past signals are kept.')">
+              {% csrf_token %}
+              <button class="text-button" type="submit">deactivate</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="empty">No watch items yet. <a href="{% url 'signalfeed:watch_create' %}">Add one</a>.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

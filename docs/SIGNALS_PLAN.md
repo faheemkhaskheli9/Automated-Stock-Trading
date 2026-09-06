@@ -22,13 +22,19 @@ scheduler (see Deployment).
 | S4 | `delivery.deliver` - email / webhook / Telegram; `execution.notifications` refactor + Telegram sender | done |
 | S5 | `send_weekly_signals` / `recap_weekly_signals` commands + tasks; Friday grading + hit-rate recap | done |
 | S6 | `/signals/` page (this week + trailing hit-rate + recent) + minimal web manifest | done |
+| U1 | `/signals/watchlist/` CRUD + `/signals/` action bar (generate / send / train / recap, run synchronously) - no more admin/CLI needed for routine use | done |
 
 ## How to run it
 
+From the UI (preferred, since U1): configure a weekly model in `/modeling/`
+(target `weekday_anchored`, entry 0 / exit 4, instruments, active), add rows at
+`/signals/watchlist/`, then use the action bar on `/signals/` -
+**Generate (no send)** / **Generate & send** / **Train watchlist models** /
+**Run recap**. Each runs synchronously and reports a summary message.
+
+Equivalent management commands (still used by the cloud scheduler):
+
 ```
-# 1. configure a weekly model in the studio (target: weekday_anchored,
-#    entry_weekday 0, exit_weekday 4), give it instruments, mark it active
-# 2. add WatchItem rows in /admin/signalfeed/watchitem/ (one per symbol)
 python manage.py train_weekly_models
 python manage.py send_weekly_signals --dry-run     # inspect, no send
 python manage.py send_weekly_signals               # build + push

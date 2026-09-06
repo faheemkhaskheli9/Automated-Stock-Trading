@@ -40,6 +40,9 @@ def test_index_renders_with_signal(client, user):
     assert "ENGRO" in body
     assert "Weekly signals" in body
     assert reverse("signalfeed:manifest") in body
+    # action bar + watchlist link are on the page
+    assert reverse("signalfeed:run") in body
+    assert reverse("signalfeed:watchlist") in body
 
 
 def test_manifest_is_json(client):

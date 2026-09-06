@@ -1,0 +1,26 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">SIGNAL FEED</p>
+      <h1>{% if instance %}Edit watch item{% else %}Add watch item{% endif %}</h1>
+      <p class="muted">The model's target must be one signalfeed can read: weekday-anchored, horizon close/return, or direction.</p>
+    </div>
+    <div><a class="secondary" href="{% url 'signalfeed:watchlist' %}">Back</a></div>
+  </div>
+  <form method="post" class="panel controls">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      <div class="field-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+    {% endfor %}
+    <button class="primary" type="submit">Save watch item</button>
+  </form>
+</main>
+{% endblock %}

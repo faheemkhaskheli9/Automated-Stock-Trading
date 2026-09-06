@@ -29,6 +29,13 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
   (watchlist + accuracy gate + email/webhook/Telegram push + Friday recap),
   built on the `modeling` studio's `weekday_anchored` target. See the per-app
   section below and `docs/SIGNALS_PLAN.md`.
+- **Phase 9 (in progress)**: operator UI - move every routine action off Django
+  admin / management commands into the server-rendered "PSX Observatory" UI,
+  app by app (U1 `signalfeed` watchlist + run actions done; U2 `strategies`
+  config, U3 `research`, U4 `portfolio`, U5 `execution` paper trading, U6
+  `risk` + `User` profile pending). Plan:
+  `C:\Users\LENOVO\.claude\plans\wondrous-brewing-starfish.md`. Paper-broker
+  actions only - live trading stays gated (Phase 6).
 
 Key direction decisions (see `docs/PLAN.md` for the full rationale):
 - Market: PSX. No official free market-data API exists - the plan uses the `psxdata` scraper
@@ -441,10 +448,18 @@ live trading stays a separate, gated phase). Routed at `/signals/`.
   `send_weekly_signals_task`, `recap_weekly_signals_task` - wire to a cloud
   scheduler: retrain weekly, send Monday pre-open, recap Friday post-close
   (all Asia/Karachi).
-- UI: `/signals/` (FBV, extends `marketdata/base.html`, linked from the shared
-  nav) - this week's cards + trailing hit-rate + recent table. Links a minimal
-  `manifest.webmanifest` (`/signals/manifest.webmanifest`) for "add to home
-  screen"; no service worker / offline support yet.
+- UI (all FBVs, extend `marketdata/base.html`, linked from the shared nav):
+  - `/signals/` - this week's cards + trailing hit-rate + recent table, plus
+    an action bar that runs the batch jobs **synchronously** in the request
+    (`signalfeed:run`, POST `action` in `generate`/`send`/`train`/`recap`;
+    `send` optionally `include_flat`). Links a minimal `manifest.webmanifest`
+    (`/signals/manifest.webmanifest`) for "add to home screen"; no service
+    worker / offline support yet.
+  - `/signals/watchlist/` - `WatchItem` list with each model's live
+    `evaluate_gate` verdict; create/edit via `WatchItemForm`
+    (`forms.eligible_models()` restricts the model choices to supported
+    targets); "deactivate" is a soft delete (`is_active=False`, history kept).
+  Django admin remains the power-user fallback.
 
 Expectations: weekly single-name direction is near coin-flip; the gate is
 what keeps noise out of the feed. Paper/advisory only for now.

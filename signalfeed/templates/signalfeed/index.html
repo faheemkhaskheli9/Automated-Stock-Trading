@@ -9,6 +9,8 @@
   .sig-meta{color:#9aa4b2;font-size:.85rem;margin-top:4px}
   .kpi{display:flex;gap:24px;flex-wrap:wrap;margin:8px 0 4px}
   .kpi b{font-size:1.4rem;display:block}
+  .sig-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  .sig-flatchk{color:#9aa4b2;font-size:.85rem;margin-right:8px}
   @media (max-width:640px){.mainnav{flex-wrap:wrap}}
 </style>
 <main>
@@ -29,6 +31,22 @@
     </div>
   </div>
 
+  <div class="panel controls">
+    <form method="post" action="{% url 'signalfeed:run' %}" class="sig-actions">
+      {% csrf_token %}
+      <label class="sig-flatchk"><input type="checkbox" name="include_flat"> deliver flat calls too</label>
+      <button class="secondary" name="action" value="generate" type="submit">Generate (no send)</button>
+      <button class="primary" name="action" value="send" type="submit"
+        onclick="return confirm('Generate and deliver this week\'s signals now?')">Generate &amp; send</button>
+      <button class="secondary" name="action" value="train" type="submit"
+        onclick="return confirm('Retrain every model on the watchlist now? This can take a while.')">Train watchlist models</button>
+      <button class="secondary" name="action" value="recap" type="submit"
+        onclick="return confirm('Backfill Friday actuals and send the recap now?')">Run recap</button>
+    </form>
+    <p class="muted"><a href="{% url 'signalfeed:watchlist' %}">Manage watchlist &rarr;</a>
+      &middot; jobs run synchronously &mdash; the page waits until they finish.</p>
+  </div>
+
   <h2 class="section-heading">This week</h2>
   <div class="sig-cards">
     {% for s in current %}
@@ -40,12 +58,12 @@
         </div>
         <div class="sig-meta">
           {{ s.get_status_display }}
-          {% if s.status == 'suppressed' %}&mdash; {{ s.suppression_reason }}{% endif %}
+          {% if s.suppression_reason %}&mdash; {{ s.suppression_reason }}{% endif %}
         </div>
         <div class="sig-meta">{{ s.trading_model.name }}</div>
       </div>
     {% empty %}
-      <p class="empty">No signals generated yet. Add watch items in <a href="/admin/signalfeed/watchitem/">admin</a> and run <code>send_weekly_signals</code>.</p>
+      <p class="empty">No signals generated yet. <a href="{% url 'signalfeed:watchlist' %}">Add watch items</a>, then use <b>Generate &amp; send</b> above.</p>
     {% endfor %}
   </div>
 
