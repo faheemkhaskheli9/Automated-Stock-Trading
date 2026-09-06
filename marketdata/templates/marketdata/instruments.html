@@ -1,0 +1,39 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+<div class="intro"><div><p class="eyebrow">PAKISTAN STOCK EXCHANGE</p><h1>Instruments</h1><p class="muted">Every saved PSX symbol, its latest stored daily close, and how the most recent model forecast for it turned out.</p></div><div class="storage"><span class="dot"></span> Tracked symbols <strong>{{ total }}</strong></div></div>
+<section class="panel controls">
+<form method="get"><div class="fields"><div><label for="q">Search symbol or name</label><input type="search" name="q" id="q" value="{{ q }}" placeholder="OGDC, bank, cement…"></div><button class="secondary" type="submit">Search</button>{% if q %}<a class="secondary" href="{% url 'marketdata:instruments' %}">Clear</a>{% endif %}</div></form>
+</section>
+<section class="panel history">
+<div class="section-heading"><div><h2>All instruments</h2><p class="muted">Latest saved daily close · latest persisted model prediction vs actual</p></div><span class="badge">{{ page.paginator.count }} shown</span></div>
+<div class="table-scroll"><table>
+<thead><tr><th>Symbol</th><th>Name</th><th>Sector</th><th>Last close</th><th>As of</th><th>Bars</th><th>Model</th><th>Target</th><th>Predicted</th><th>Actual</th><th>Abs error</th></tr></thead>
+<tbody>
+{% for row in rows %}
+<tr>
+<td><strong>{{ row.instrument.symbol }}</strong></td>
+<td>{{ row.instrument.name|default:'—' }}</td>
+<td>{{ row.instrument.sector|default:'—' }}</td>
+<td>{% if row.last_bar %}<strong>{{ row.last_bar.close|floatformat:2 }}</strong>{% else %}—{% endif %}</td>
+<td>{{ row.last_bar.timestamp|date:'d M Y'|default:'—' }}</td>
+<td>{{ row.instrument.bar_count }}</td>
+{% if row.prediction %}
+<td>{{ row.prediction.model.name }}</td>
+<td>{{ row.prediction.target_date|date:'d M Y' }}</td>
+<td>{{ row.prediction.predicted_value|floatformat:2|default:'—' }}</td>
+<td>{% if row.prediction.actual_value is not None %}{{ row.prediction.actual_value|floatformat:2 }}{% else %}<span class="muted">pending</span>{% endif %}</td>
+<td>{% if row.prediction.abs_error is not None %}{{ row.prediction.abs_error|floatformat:2 }}{% else %}—{% endif %}</td>
+{% else %}
+<td class="muted">no forecast</td><td>—</td><td>—</td><td>—</td><td>—</td>
+{% endif %}
+</tr>
+{% empty %}
+<tr><td colspan="11" class="empty">{% if q %}No instruments match “{{ q }}”.{% else %}No instruments saved yet. Fetch a symbol from Market Data to build a library.{% endif %}</td></tr>
+{% endfor %}
+</tbody>
+</table></div>
+{% if page.has_other_pages %}<div class="pagination">{% if page.has_previous %}<a href="?{{ query }}&page={{ page.previous_page_number }}">← Previous</a>{% endif %}<span>Page {{ page.number }} of {{ page.paginator.num_pages }}</span>{% if page.has_next %}<a href="?{{ query }}&page={{ page.next_page_number }}">Next →</a>{% endif %}</div>{% endif %}
+</section>
+</main>
+{% endblock %}

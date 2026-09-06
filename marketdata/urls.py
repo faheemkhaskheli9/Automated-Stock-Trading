@@ -6,6 +6,7 @@ from . import views
 app_name = "marketdata"
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("instruments/", views.instruments, name="instruments"),
     path("sync/", views.sync_history, name="sync"),
     path(
         "login/",
