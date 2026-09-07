@@ -1,6 +1,5 @@
 {% extends 'marketdata/base.html' %}
 {% block content %}
-<style>.ok{color:#3ecf8e}.no{color:#ff6b6b}</style>
 <main>
   <div class="intro">
     <div>
@@ -16,7 +15,7 @@
       <tbody>
         <tr><td>Status</td><td>{{ order.get_status_display }}</td></tr>
         <tr><td>Filled</td><td>{% if order.filled_price %}{{ order.filled_quantity }} @ {{ order.filled_price|floatformat:4 }}{% else %}&mdash;{% endif %}</td></tr>
-        {% if order.rejection_reason %}<tr><td>Rejection reason</td><td class="no">{{ order.rejection_reason }}</td></tr>{% endif %}
+        {% if order.rejection_reason %}<tr><td>Rejection reason</td><td class="is-neg">{{ order.rejection_reason }}</td></tr>{% endif %}
         <tr><td>Strategy</td><td>{{ order.strategy.name|default:"manual / API" }}</td></tr>
         <tr><td>Broker order id</td><td>{{ order.broker_order_id|default:"&mdash; (local paper)" }}</td></tr>
       </tbody>
@@ -47,7 +46,7 @@
           <td>{{ d.created_at|date:"Y-m-d H:i" }}</td>
           <td>{{ d.action }}</td>
           <td>{{ d.quantity }}</td>
-          <td class="{% if d.approved %}ok{% else %}no{% endif %}">{{ d.approved|yesno:"yes,no" }}</td>
+          <td class="{% if d.approved %}is-pos{% else %}is-neg{% endif %}">{{ d.approved|yesno:"yes,no" }}</td>
           <td>{{ d.reason|default:"&mdash;" }}</td>
         </tr>
       {% empty %}

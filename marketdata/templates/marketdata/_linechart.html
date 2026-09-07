@@ -1,0 +1,26 @@
+{% comment %}
+Shared line / equity chart. Renders one or two polyline series in a consistent,
+theme-aware inline SVG. Params:
+  aria       - accessible label (required)
+  height     - SVG height in px (default 240)
+  s1_points  - "x,y x,y ..." string for the primary series (required)
+  s1_label   - legend text for the primary series (optional)
+  s2_points  - optional second series ("x,y ..."), drawn dashed
+  s2_label   - legend text for the second series (optional)
+  caption    - extra muted text after the legend (optional)
+The point strings are pre-scaled by the view to the 1000 x <height> viewBox.
+{% endcomment %}
+<div class="chart-lines">
+  <svg viewBox="0 0 1000 {{ height|default:240 }}" preserveAspectRatio="none" role="img" aria-label="{{ aria }}">
+    <line class="axis" x1="0" y1="{{ height|default:240 }}" x2="1000" y2="{{ height|default:240 }}"/>
+    <polyline class="series-a" points="{{ s1_points }}"/>
+    {% if s2_points %}<polyline class="series-b" points="{{ s2_points }}"/>{% endif %}
+  </svg>
+  {% if s1_label or s2_label or caption %}
+  <p class="chart-caption muted">
+    {% if s1_label %}<i class="swatch swatch-a"></i>{{ s1_label }}{% endif %}
+    {% if s2_label %} <i class="swatch swatch-b"></i>{{ s2_label }}{% endif %}
+    {% if caption %} {{ caption }}{% endif %}
+  </p>
+  {% endif %}
+</div>

@@ -1,10 +1,5 @@
 {% extends 'marketdata/base.html' %}
 {% block content %}
-<style>
-  .ord-filled{color:#3ecf8e}.ord-rejected{color:#ff6b6b}.ord-cancelled{color:#9aa4b2}
-  .ord-bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
-  .ord-bar form{display:inline}
-</style>
 <main>
   <div class="intro">
     <div>
@@ -12,7 +7,7 @@
       <h1>Orders</h1>
       <p class="muted">Paper only. Every order runs the duplicate guard and <code>risk.engine.evaluate</code> before a broker sees it.</p>
     </div>
-    <div class="ord-bar">
+    <div class="action-row">
       <a class="primary" href="{% url 'execution:place_order' %}">Place paper order</a>
       {% if can_run_cycle %}
       <form method="post" action="{% url 'execution:run_cycle' %}"
@@ -27,7 +22,7 @@
   {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
 
   <div class="panel">
-    <form method="get" class="ord-bar">
+    <form method="get" class="action-row">
       <label>Status
         <select name="status" onchange="this.form.submit()">
           <option value="">all</option>

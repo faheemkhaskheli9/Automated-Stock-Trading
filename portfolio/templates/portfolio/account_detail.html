@@ -1,10 +1,5 @@
 {% extends 'marketdata/base.html' %}
 {% block content %}
-<style>
-  .pf-kpi{display:flex;gap:28px;flex-wrap:wrap;margin:8px 0}
-  .pf-kpi b{font-size:1.4rem;display:block}
-  .pnl-pos{color:#3ecf8e}.pnl-neg{color:#ff6b6b}
-</style>
 <main>
   <div class="intro">
     <div>
@@ -20,7 +15,7 @@
   {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
 
   <div class="panel">
-    <div class="pf-kpi">
+    <div class="kpi">
       <span><b>{{ account.cash_balance|floatformat:2 }}</b>cash ({{ account.currency }})</span>
       <span><b>{{ invested|floatformat:2 }}</b>invested (mark-to-market)</span>
       <span><b>{{ equity|floatformat:2 }}</b>equity</span>
@@ -39,7 +34,7 @@
           <td>{{ p.obj.avg_entry_price|floatformat:4 }}</td>
           <td>{{ p.cost|floatformat:2 }}</td>
           <td>{{ p.market_value|floatformat:2 }}</td>
-          <td class="{% if p.unrealized_pnl >= 0 %}pnl-pos{% else %}pnl-neg{% endif %}">{{ p.unrealized_pnl|floatformat:2 }}</td>
+          <td class="{% if p.unrealized_pnl >= 0 %}is-pos{% else %}is-neg{% endif %}">{{ p.unrealized_pnl|floatformat:2 }}</td>
         </tr>
       {% empty %}
         <tr><td colspan="6" class="empty">No open positions.</td></tr>

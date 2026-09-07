@@ -1,10 +1,5 @@
 {% extends 'marketdata/base.html' %}
 {% block content %}
-<style>
-  .st-actions{display:flex;gap:10px;align-items:center}
-  .st-actions form{display:inline}
-  .st-on{color:#3ecf8e}.st-off{color:#9aa4b2}
-</style>
 <main>
   <div class="intro">
     <div>
@@ -12,7 +7,7 @@
       <h1>Configured strategies</h1>
       <p class="muted">A strategy row is what <code>run_trading_cycle</code> executes: a registered class key + params + instruments + the account it trades on when active.</p>
     </div>
-    <div class="st-actions">
+    <div class="action-row">
       <a class="secondary" href="{% url 'strategies:manual_list' %}">Manual signals</a>
       <a class="primary" href="{% url 'strategies:strategy_create' %}">New strategy</a>
     </div>
@@ -29,8 +24,8 @@
           <td>{{ s.key }}</td>
           <td>{{ s.instruments.count }}</td>
           <td>{{ s.account.name|default:"—" }}</td>
-          <td class="{% if s.is_active %}st-on{% else %}st-off{% endif %}">{% if s.is_active %}active{% else %}inactive{% endif %}</td>
-          <td class="st-actions">
+          <td class="{% if s.is_active %}is-pos{% else %}is-flat{% endif %}">{% if s.is_active %}active{% else %}inactive{% endif %}</td>
+          <td class="action-row">
             <a href="{% url 'strategies:strategy_edit' s.pk %}">edit</a>
             <form method="post" action="{% url 'strategies:strategy_toggle' s.pk %}">
               {% csrf_token %}

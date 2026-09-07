@@ -1,7 +1,5 @@
 {% extends 'marketdata/base.html' %}
-{% load static %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'modeling/modeling.css' %}">
 <main>
   <div class="intro">
     <div>
@@ -55,7 +53,7 @@
   </div>
 
   {% if board.unscored %}
-  <p class="muted" style="margin-top:18px">
+  <p class="muted">
     Active but unranked (no backfilled predictions in window):
     {% for m in board.unscored %}<a class="secondary-link" href="{% url 'modeling:detail' m.pk %}">{{ m.name }}</a>{% if not forloop.last %}, {% endif %}{% endfor %}
   </p>

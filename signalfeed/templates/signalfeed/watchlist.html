@@ -1,10 +1,5 @@
 {% extends 'marketdata/base.html' %}
 {% block content %}
-<style>
-  .gate-pass{color:#3ecf8e}.gate-block{color:#ff6b6b}
-  .wl-actions{display:flex;gap:10px;align-items:center}
-  .wl-actions form{display:inline}
-</style>
 <main>
   <div class="intro">
     <div>
@@ -12,7 +7,7 @@
       <h1>Watchlist</h1>
       <p class="muted">Each row pairs an instrument with the model whose weekly forecast is delivered for it, plus the accuracy bar that model must clear to be sent live.</p>
     </div>
-    <div class="wl-actions">
+    <div class="action-row">
       <a class="secondary" href="{% url 'signalfeed:index' %}">Back</a>
       <a class="primary" href="{% url 'signalfeed:watch_create' %}">Add watch item</a>
     </div>
@@ -36,10 +31,10 @@
           <td>{% if item.sizing_capital %}{{ item.sizing_capital|floatformat:0 }}{% else %}<span class="muted">off</span>{% endif %}</td>
           <td>{{ item.max_position_pct|floatformat:1 }}</td>
           <td>{{ item.kelly_fraction|floatformat:2 }}</td>
-          <td class="{% if gate.passed %}gate-pass{% else %}gate-block{% endif %}">
+          <td class="{% if gate.passed %}is-pos{% else %}is-neg{% endif %}">
             {% if gate.passed %}pass{% else %}blocked{% endif %} &mdash; {{ gate.reason }}
           </td>
-          <td class="wl-actions">
+          <td class="action-row">
             <a href="{% url 'signalfeed:watch_edit' item.pk %}">edit</a>
             {% if item.is_active %}
             <form method="post" action="{% url 'signalfeed:watch_delete' item.pk %}"

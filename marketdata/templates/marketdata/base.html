@@ -1,7 +1,7 @@
 {% load static %}
 <!doctype html>
 <html lang="en">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PSX Observatory</title><link rel="stylesheet" href="{% static 'marketdata/dashboard.css' %}"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>PSX Observatory</title><link rel="stylesheet" href="{% static 'marketdata/dashboard.css' %}"></head>
 <body>
 <header><a class="brand" href="{% url 'marketdata:dashboard' %}"><span class="brand-icon">P</span> PSX <span>Observatory</span></a>{% with app=request.resolver_match.app_name url=request.resolver_match.url_name %}{% if user.is_authenticated %}<nav class="mainnav">
 <a class="navlink" href="{% url 'marketdata:dashboard' %}"{% if app == 'marketdata' and url != 'instruments' and url != 'instrument_detail' %} aria-current="page"{% endif %}>Market Data</a>

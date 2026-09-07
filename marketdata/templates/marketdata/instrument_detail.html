@@ -128,11 +128,11 @@
   {% if candles %}
   <div class="chart-scale"><span>{{ chart.hi|floatformat:2 }}</span><span>{{ chart.mid|floatformat:2 }}</span><span>{{ chart.lo|floatformat:2 }}</span></div>
   <svg viewBox="0 0 1000 300" role="img" aria-label="Candlestick chart for {{ instrument.symbol }} from {{ chart.start|date:'d M Y' }} to {{ chart.end|date:'d M Y' }}">
-    <path d="M20 12H980 M20 131H980 M20 250H980" stroke="#e6ebe9" fill="none"/>
+    <path class="chart-grid" d="M20 12H980 M20 131H980 M20 250H980"/>
     {% for c in candles %}
-    <line x1="{{ c.x|floatformat:2 }}" x2="{{ c.x|floatformat:2 }}" y1="{{ c.wick_top|floatformat:2 }}" y2="{{ c.wick_bottom|floatformat:2 }}" stroke="{% if c.up %}#0e9877{% else %}#d64545{% endif %}" stroke-width="1"/>
-    <rect x="{{ c.body_x|floatformat:2 }}" y="{{ c.body_y|floatformat:2 }}" width="{{ chart.body_w|floatformat:2 }}" height="{{ c.body_h|floatformat:2 }}" fill="{% if c.up %}#0e9877{% else %}#d64545{% endif %}"/>
-    <rect x="{{ c.body_x|floatformat:2 }}" y="{{ c.vol_y|floatformat:2 }}" width="{{ chart.body_w|floatformat:2 }}" height="{{ c.vol_h|floatformat:2 }}" fill="#c7d3cd"/>
+    <line class="{% if c.up %}candle-up{% else %}candle-down{% endif %}" x1="{{ c.x|floatformat:2 }}" x2="{{ c.x|floatformat:2 }}" y1="{{ c.wick_top|floatformat:2 }}" y2="{{ c.wick_bottom|floatformat:2 }}" stroke-width="1"/>
+    <rect class="{% if c.up %}candle-up{% else %}candle-down{% endif %}" x="{{ c.body_x|floatformat:2 }}" y="{{ c.body_y|floatformat:2 }}" width="{{ chart.body_w|floatformat:2 }}" height="{{ c.body_h|floatformat:2 }}"/>
+    <rect class="candle-vol" x="{{ c.body_x|floatformat:2 }}" y="{{ c.vol_y|floatformat:2 }}" width="{{ chart.body_w|floatformat:2 }}" height="{{ c.vol_h|floatformat:2 }}"/>
     {% endfor %}
     {% for line in overlay_lines %}{% if line.points %}<polyline points="{{ line.points }}" fill="none" stroke="{{ line.color }}" stroke-width="1.6" stroke-linejoin="round"/>{% endif %}{% endfor %}
   </svg>

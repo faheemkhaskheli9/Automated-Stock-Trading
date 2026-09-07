@@ -1,7 +1,5 @@
 {% extends 'marketdata/base.html' %}
-{% load static %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'modeling/modeling.css' %}">
 <main>
   <div class="intro">
     <div><p class="eyebrow">MODEL</p><h1>{{ model.name }}</h1><p class="muted">{{ model.estimator_key }} &middot; {{ model.task }} &middot; target: {{ model.target_spec.type }}</p></div>
@@ -9,7 +7,7 @@
       <a class="secondary" href="{% url 'modeling:edit' model.pk %}">Edit</a>
       <a class="secondary" href="{% url 'modeling:predict' model.pk %}">Predict</a>
       <a class="secondary" href="?export=csv">Predictions CSV</a>
-      <form method="post" style="display:inline"><input type="hidden" name="action" value="train">{% csrf_token %}<button class="primary" type="submit">Train now</button></form>
+      <form method="post" class="inline-form"><input type="hidden" name="action" value="train">{% csrf_token %}<button class="primary" type="submit">Train now</button></form>
     </div>
   </div>
   {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
@@ -26,7 +24,7 @@ estimator_params = {{ model.estimator_params }}</pre>
   {% with train=model.metrics.train holdout=model.metrics.holdout %}
   {% if holdout %}
   <div class="panel table-scroll">
-    <h2 style="padding:18px 20px 0">Metrics</h2>
+    <h2 class="panel-title">Metrics</h2>
     <table>
       <thead><tr><th>Split</th><th>n</th><th>MAE</th><th>RMSE</th><th>MAPE</th><th>R2</th><th>Dir. acc</th><th>Skill vs naive</th><th>Accuracy</th><th>F1</th><th>ROC AUC</th></tr></thead>
       <tbody>
@@ -41,17 +39,13 @@ estimator_params = {{ model.estimator_params }}</pre>
 
   {% if points %}
   <div class="panel chart">
-    <h2 style="padding:18px 20px 0">Predicted vs actual ({{ scored_count }} scored{% if rolling_mae %}, MAE {{ rolling_mae|floatformat:3 }}{% endif %})</h2>
-    <svg viewBox="0 0 1000 240" preserveAspectRatio="none" style="width:100%;height:240px">
-      <polyline fill="none" stroke="#137c5b" stroke-width="2" points="{{ points.actual }}"/>
-      <polyline fill="none" stroke="#c07a1e" stroke-width="2" stroke-dasharray="5 4" points="{{ points.predicted }}"/>
-    </svg>
-    <p class="muted" style="padding:0 20px 16px">Green = actual, dashed amber = predicted.</p>
+    <h2 class="panel-title">Predicted vs actual ({{ scored_count }} scored{% if rolling_mae %}, MAE {{ rolling_mae|floatformat:3 }}{% endif %})</h2>
+    {% include "marketdata/_linechart.html" with aria="Predicted vs actual close" s1_points=points.actual s1_label="Actual" s2_points=points.predicted s2_label="Predicted" %}
   </div>
   {% endif %}
 
   <div class="panel table-scroll">
-    <h2 style="padding:18px 20px 0">Training runs</h2>
+    <h2 class="panel-title">Training runs</h2>
     <table>
       <thead><tr><th>#</th><th>Status</th><th>Started</th><th>Rows</th><th>Features</th><th>Error</th></tr></thead>
       <tbody>
@@ -62,7 +56,7 @@ estimator_params = {{ model.estimator_params }}</pre>
   </div>
 
   <div class="panel table-scroll">
-    <h2 style="padding:18px 20px 0">Recent predictions</h2>
+    <h2 class="panel-title">Recent predictions</h2>
     <table>
       <thead><tr><th>Instrument</th><th>As of</th><th>Target date</th><th>Predicted</th><th>Actual</th><th>Abs error</th></tr></thead>
       <tbody>

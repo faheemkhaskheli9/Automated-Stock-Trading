@@ -1,12 +1,5 @@
 {% extends 'marketdata/base.html' %}
 {% block content %}
-<style>
-  .chip{display:inline-block;padding:1px 7px;border-radius:10px;font-size:.75rem}
-  .chip.pos{background:#123a2c;color:#3ecf8e}.chip.neg{background:#3a1a1a;color:#ff6b6b}
-  .chip.neutral,.chip.unknown{background:#26303a;color:#9aa4b2}
-  .rs-sync{display:flex;flex-wrap:wrap;gap:8px;align-items:end}
-  .rs-sync .field-row{margin:0}
-</style>
 <main>
   <div class="intro">
     <div>
@@ -36,7 +29,7 @@
           <td>{{ h.published_at|date:"Y-m-d" }}</td>
           <td>{{ h.headline }}</td>
           <td>{{ h.source|default:"&mdash;" }}</td>
-          <td><span class="chip {{ h.tone }}">{% if h.sentiment is not None %}{{ h.sentiment|floatformat:2 }}{% else %}n/a{% endif %}</span></td>
+          <td><span class="chip chip-{{ h.tone }}">{% if h.sentiment is not None %}{{ h.sentiment|floatformat:2 }}{% else %}n/a{% endif %}</span></td>
         </tr>
       {% empty %}
         <tr><td colspan="4" class="empty">No headlines at or before now.</td></tr>

@@ -1,7 +1,5 @@
 {% extends 'marketdata/base.html' %}
-{% load static %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'modeling/modeling.css' %}">
 <main>
   <div class="intro"><div><p class="eyebrow">MODELING</p><h1>Estimator catalogue</h1><p class="muted">Every registered model type. "Unavailable" means a required optional dependency is missing.</p></div><div><a class="secondary" href="{% url 'modeling:index' %}">Back</a></div></div>
   <div class="panel table-scroll">

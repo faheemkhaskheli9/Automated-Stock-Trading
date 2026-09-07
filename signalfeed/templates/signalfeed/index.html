@@ -1,18 +1,6 @@
 {% extends 'marketdata/base.html' %}
 {% block content %}
 <link rel="manifest" href="{% url 'signalfeed:manifest' %}">
-<style>
-  .sig-cards{display:flex;flex-wrap:wrap;gap:12px;margin:12px 0}
-  .sig-card{border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:14px 16px;min-width:180px;flex:1 1 200px}
-  .sig-dir{font-size:1.3rem;font-weight:700;letter-spacing:.03em}
-  .sig-up{color:#3ecf8e}.sig-down{color:#ff6b6b}.sig-flat{color:#9aa4b2}
-  .sig-meta{color:#9aa4b2;font-size:.85rem;margin-top:4px}
-  .kpi{display:flex;gap:24px;flex-wrap:wrap;margin:8px 0 4px}
-  .kpi b{font-size:1.4rem;display:block}
-  .sig-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-  .sig-flatchk{color:#9aa4b2;font-size:.85rem;margin-right:8px}
-  @media (max-width:640px){.mainnav{flex-wrap:wrap}}
-</style>
 <main>
   <div class="intro">
     <div>
@@ -32,9 +20,9 @@
   </div>
 
   <div class="panel controls">
-    <form method="post" action="{% url 'signalfeed:run' %}" class="sig-actions">
+    <form method="post" action="{% url 'signalfeed:run' %}" class="action-row">
       {% csrf_token %}
-      <label class="sig-flatchk"><input type="checkbox" name="include_flat"> deliver flat calls too</label>
+      <label class="muted"><input type="checkbox" name="include_flat"> deliver flat calls too</label>
       <button class="secondary" name="action" value="generate" type="submit">Generate (no send)</button>
       <button class="primary" name="action" value="send" type="submit"
         onclick="return confirm('Generate and deliver this week\'s signals now?')">Generate &amp; send</button>
