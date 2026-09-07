@@ -19,5 +19,10 @@ router.register("predictions", views.ModelPredictionViewSet, basename="modelpred
 router.register("trading-models", views.TradingModelViewSet, basename="tradingmodel")
 router.register("backtests", views.BacktestViewSet, basename="backtest")
 router.register("backtest-runs", views.BacktestRunViewSet, basename="backtestrun")
+router.register(
+    "forecast-backtest-runs",
+    views.ForecastBacktestRunViewSet,
+    basename="forecastbacktestrun",
+)
 
 urlpatterns = router.urls

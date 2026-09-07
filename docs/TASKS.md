@@ -365,3 +365,19 @@ Validation: 213 tests passing; Django check, migration check, black, isort and r
   skipped; black/isort/ruff + Django check + `makemigrations --check` clean.
   No new dependencies. Next for this path: the Phase D dashboard runner (D7) +
   a DRF read viewset for `ForecastBacktestRun`.
+
+- 2026-09-07 - DRF read endpoint for the strict-path walk-forward runs:
+  `api/` gains `forecast-backtest-runs` (`forecasting.ForecastBacktestRun`) -
+  list/retrieve only, operator-global (`IsAuthenticated`, no
+  `OwnerScopedMixin`), `?symbol=` filterable via the shared
+  `SymbolFilterMixin` (default `symbol` lookup). `ForecastBacktestRunSerializer`
+  exposes the whole flat row (config + JSON results) read-only, plus the
+  `skill_vs_naive` property. Closes the "DRF read viewset for
+  `ForecastBacktestRun`" item left open above; the parallel
+  `backtesting.BacktestRun` was already exposed (E1). 2 new tests
+  (`api/tests/test_api.py::ResearchForecastingApiTests`: list + symbol filter +
+  serialization incl. `skill_vs_naive`; POST -> 405). No new dependencies, no
+  migration. Full suite 531 passed / 6 skipped; `manage.py check` +
+  black/isort/ruff on `api/` clean. (Early in the session `scipy`'s native
+  DLLs were transiently blocked by a Windows Application Control policy; it
+  cleared once the OS finished evaluating them.)

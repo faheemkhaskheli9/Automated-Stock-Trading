@@ -2,6 +2,7 @@ from rest_framework import serializers
 
 from backtesting.models import Backtest, BacktestRun
 from execution.models import Order, Trade
+from forecasting.models import ForecastBacktestRun
 from marketdata.models import Instrument, PriceBar
 from modeling.models import ModelPrediction, TradingModel
 from portfolio.models import Account, Position
@@ -274,5 +275,53 @@ class BacktestSerializer(serializers.ModelSerializer):
             "is_active",
             "updated_at",
             "runs",
+        ]
+        read_only_fields = fields
+
+
+class ForecastBacktestRunSerializer(serializers.ModelSerializer):
+    """Frozen strict-path walk-forward run (forecasting.backtesting). One flat
+    row - config plus JSON results - so it is exposed whole, read-only."""
+
+    skill_vs_naive = serializers.ReadOnlyField()
+
+    class Meta:
+        model = ForecastBacktestRun
+        fields = [
+            "id",
+            "name",
+            "predictor_key",
+            "params",
+            "symbol",
+            "exchange",
+            "exchange_timezone",
+            "provider_keys",
+            "scheme",
+            "train_span",
+            "test_span",
+            "step",
+            "gap",
+            "start",
+            "end",
+            "allow_short",
+            "long_threshold",
+            "cost_bps",
+            "initial_cash",
+            "status",
+            "started_at",
+            "finished_at",
+            "n_folds",
+            "n_skipped_folds",
+            "n_predictions",
+            "metrics",
+            "naive_metrics",
+            "trading",
+            "equity_curve",
+            "folds",
+            "predictions",
+            "skipped_folds",
+            "looks_leaky",
+            "skill_vs_naive",
+            "error",
         ]
         read_only_fields = fields

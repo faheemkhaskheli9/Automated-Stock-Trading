@@ -229,6 +229,8 @@ activate the venv first):
     `trading-models` (`modeling.TradingModel`) is GET/PATCH with only `is_active`
     writable, mirroring `StrategyViewSet`. `news`/`research-snapshots`/`predictions`
     take `?symbol=` (shared `SymbolFilterMixin`, `symbol_lookup` ORM path).
+    `forecast-backtest-runs` (`forecasting.ForecastBacktestRun`, the strict-path
+    walk-forward runs) is list/retrieve only and also `?symbol=`-filterable.
 
 When adding an app, register it in `AutomaticStockTrading/settings/base.py`
 (`INSTALLED_APPS`) and wire its URLs into `AutomaticStockTrading/urls.py` via `include()`.

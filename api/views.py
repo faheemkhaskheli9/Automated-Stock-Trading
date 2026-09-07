@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 
 from backtesting.models import Backtest, BacktestRun
 from execution.models import Order, Trade
+from forecasting.models import ForecastBacktestRun
 from marketdata.models import Instrument, PriceBar
 from modeling.models import ModelPrediction, TradingModel
 from portfolio.models import Account, Position
@@ -15,6 +16,7 @@ from .serializers import (
     AccountSerializer,
     BacktestRunSerializer,
     BacktestSerializer,
+    ForecastBacktestRunSerializer,
     InstrumentSerializer,
     ModelPredictionSerializer,
     NewsItemSerializer,
@@ -182,6 +184,14 @@ class BacktestViewSet(_ReadOnlyViewSet):
 class BacktestRunViewSet(_ReadOnlyViewSet):
     queryset = BacktestRun.objects.select_related("backtest").all()
     serializer_class = BacktestRunSerializer
+
+
+class ForecastBacktestRunViewSet(SymbolFilterMixin, _ReadOnlyViewSet):
+    """Strict-path walk-forward runs (forecasting.ForecastBacktestRun).
+    Supports ?symbol=ENGRO."""
+
+    queryset = ForecastBacktestRun.objects.all()
+    serializer_class = ForecastBacktestRunSerializer
 
 
 class TradingModelViewSet(_ReadOnlyViewSet, mixins.UpdateModelMixin):

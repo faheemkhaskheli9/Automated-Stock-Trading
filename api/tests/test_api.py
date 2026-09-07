@@ -8,6 +8,7 @@ from rest_framework.test import APITestCase
 
 from backtesting.models import Backtest, BacktestRun
 from execution.models import Order
+from forecasting.models import ForecastBacktestRun
 from marketdata.models import Instrument, PriceBar
 from modeling.models import ModelPrediction, TradingModel
 from portfolio.models import Account, Position
@@ -173,6 +174,23 @@ class ResearchForecastingApiTests(APITestCase):
         )
         self.backtest = Backtest.objects.create(name="BT-1", model=self.model)
         BacktestRun.objects.create(backtest=self.backtest, status=BacktestRun.Status.SUCCESS)
+        ForecastBacktestRun.objects.create(
+            name="FBT-ENGRO",
+            predictor_key="ridge",
+            symbol="ENGRO",
+            start=date(2026, 1, 1),
+            end=date(2026, 6, 1),
+            status=ForecastBacktestRun.Status.SUCCESS,
+            metrics={"skill_vs_naive": 0.12},
+        )
+        ForecastBacktestRun.objects.create(
+            name="FBT-LUCK",
+            predictor_key="naive",
+            symbol="LUCK",
+            start=date(2026, 1, 1),
+            end=date(2026, 6, 1),
+            status=ForecastBacktestRun.Status.SUCCESS,
+        )
 
     def test_all_endpoints_require_authentication(self):
         for name in (
@@ -182,6 +200,7 @@ class ResearchForecastingApiTests(APITestCase):
             "tradingmodel-list",
             "backtest-list",
             "backtestrun-list",
+            "forecastbacktestrun-list",
         ):
             self.assertEqual(self.client.get(reverse(name)).status_code, status.HTTP_403_FORBIDDEN)
 
@@ -236,6 +255,26 @@ class ResearchForecastingApiTests(APITestCase):
         self.client.force_authenticate(make_user())
         response = self.client.post(reverse("modelprediction-list"), {}, format="json")
         self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+    def test_forecast_backtest_runs_list_filter_and_serialization(self):
+        self.client.force_authenticate(make_user())
+
+        response = self.client.get(reverse("forecastbacktestrun-list"))
+        self.assertEqual(response.data["count"], 2)
+
+        filtered = self.client.get(reverse("forecastbacktestrun-list"), {"symbol": "engro"})
+        self.assertEqual(filtered.data["count"], 1)
+        row = filtered.data["results"][0]
+        self.assertEqual(row["symbol"], "ENGRO")
+        self.assertEqual(row["predictor_key"], "ridge")
+        self.assertEqual(row["skill_vs_naive"], 0.12)
+
+    def test_forecast_backtest_runs_are_read_only(self):
+        self.client.force_authenticate(make_user())
+        self.assertEqual(
+            self.client.post(reverse("forecastbacktestrun-list"), {}, format="json").status_code,
+            status.HTTP_405_METHOD_NOT_ALLOWED,
+        )
 
 
 class PriceBarApiTests(APITestCase):
