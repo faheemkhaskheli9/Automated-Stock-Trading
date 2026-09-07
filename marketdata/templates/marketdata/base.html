@@ -3,7 +3,67 @@
 <html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>PSX Observatory</title><link rel="stylesheet" href="{% static 'marketdata/dashboard.css' %}"></head>
 <body>
-<header><a class="brand" href="{% url 'marketdata:dashboard' %}"><span class="brand-icon">P</span> PSX <span>Observatory</span></a>{% if user.is_authenticated %}<nav class="mainnav">{% with app=request.resolver_match.app_name url=request.resolver_match.url_name %}<a href="{% url 'marketdata:dashboard' %}"{% if app == 'marketdata' and url != 'instruments' and url != 'instrument_detail' %} aria-current="page"{% endif %}>Market Data</a><a href="{% url 'marketdata:instruments' %}"{% if url == 'instruments' or url == 'instrument_detail' %} aria-current="page"{% endif %}>Instruments</a><a href="{% url 'strategies:strategy_list' %}"{% if app == 'strategies' and url != 'backtest' %} aria-current="page"{% endif %}>Strategies</a><a href="{% url 'strategies:backtest' %}"{% if app == 'strategies' and url == 'backtest' %} aria-current="page"{% endif %}>Strategy Backtest</a><a href="{% url 'modeling:index' %}"{% if app == 'modeling' and url != 'leaderboard' %} aria-current="page"{% endif %}>Modeling</a><a href="{% url 'modeling:leaderboard' %}"{% if app == 'modeling' and url == 'leaderboard' %} aria-current="page"{% endif %}>Leaderboard</a><a href="{% url 'backtesting:index' %}"{% if app == 'backtesting' %} aria-current="page"{% endif %}>Model Backtests</a><a href="{% url 'forecasting:index' %}"{% if app == 'forecasting' %} aria-current="page"{% endif %}>Forecast Backtests</a><a href="{% url 'signalfeed:index' %}"{% if app == 'signalfeed' %} aria-current="page"{% endif %}>Signals</a><a href="{% url 'research:index' %}"{% if app == 'research' %} aria-current="page"{% endif %}>Research</a><a href="{% url 'portfolio:account_list' %}"{% if app == 'portfolio' %} aria-current="page"{% endif %}>Portfolio</a><a href="{% url 'execution:order_list' %}"{% if app == 'execution' %} aria-current="page"{% endif %}>Trading</a><a href="{% url 'risk:decisions' %}"{% if app == 'risk' %} aria-current="page"{% endif %}>Risk</a><a href="{% url 'user:profile' %}"{% if app == 'user' %} aria-current="page"{% endif %}>Profile</a><a href="/admin/">Admin</a><a href="/api/">API</a>{% endwith %}</nav>{% endif %}<div class="header-right"><span class="badge">DAILY MARKET DATA</span>{% if user.is_authenticated %}<form method="post" action="{% url 'marketdata:logout' %}">{% csrf_token %}<button class="text-button">Sign out</button></form>{% endif %}</div></header>
+<header><a class="brand" href="{% url 'marketdata:dashboard' %}"><span class="brand-icon">P</span> PSX <span>Observatory</span></a>{% with app=request.resolver_match.app_name url=request.resolver_match.url_name %}{% if user.is_authenticated %}<nav class="mainnav">
+<a class="navlink" href="{% url 'marketdata:dashboard' %}"{% if app == 'marketdata' and url != 'instruments' and url != 'instrument_detail' %} aria-current="page"{% endif %}>Market Data</a>
+<div class="navgroup"><button type="button" class="navgroup-btn" aria-haspopup="true" aria-expanded="false"{% if url == 'instruments' or url == 'instrument_detail' or app == 'research' or app == 'signalfeed' %} aria-current="true"{% endif %}>Research</button><div class="navgroup-menu">
+<a href="{% url 'marketdata:instruments' %}"{% if url == 'instruments' or url == 'instrument_detail' %} aria-current="page"{% endif %}>Instruments</a>
+<a href="{% url 'research:index' %}"{% if app == 'research' %} aria-current="page"{% endif %}>Research</a>
+<a href="{% url 'signalfeed:index' %}"{% if app == 'signalfeed' %} aria-current="page"{% endif %}>Signals</a>
+</div></div>
+<div class="navgroup"><button type="button" class="navgroup-btn" aria-haspopup="true" aria-expanded="false"{% if app == 'strategies' %} aria-current="true"{% endif %}>Strategies</button><div class="navgroup-menu">
+<a href="{% url 'strategies:strategy_list' %}"{% if app == 'strategies' and url != 'backtest' %} aria-current="page"{% endif %}>Strategies</a>
+<a href="{% url 'strategies:backtest' %}"{% if app == 'strategies' and url == 'backtest' %} aria-current="page"{% endif %}>Strategy Backtest</a>
+</div></div>
+<div class="navgroup"><button type="button" class="navgroup-btn" aria-haspopup="true" aria-expanded="false"{% if app == 'modeling' or app == 'backtesting' or app == 'forecasting' %} aria-current="true"{% endif %}>Models</button><div class="navgroup-menu">
+<a href="{% url 'modeling:index' %}"{% if app == 'modeling' and url != 'leaderboard' %} aria-current="page"{% endif %}>Modeling</a>
+<a href="{% url 'modeling:leaderboard' %}"{% if app == 'modeling' and url == 'leaderboard' %} aria-current="page"{% endif %}>Leaderboard</a>
+<a href="{% url 'backtesting:index' %}"{% if app == 'backtesting' %} aria-current="page"{% endif %}>Model Backtests</a>
+<a href="{% url 'forecasting:index' %}"{% if app == 'forecasting' %} aria-current="page"{% endif %}>Forecast Backtests</a>
+</div></div>
+<div class="navgroup"><button type="button" class="navgroup-btn" aria-haspopup="true" aria-expanded="false"{% if app == 'portfolio' or app == 'execution' or app == 'risk' %} aria-current="true"{% endif %}>Trading</button><div class="navgroup-menu">
+<a href="{% url 'portfolio:account_list' %}"{% if app == 'portfolio' %} aria-current="page"{% endif %}>Portfolio</a>
+<a href="{% url 'execution:order_list' %}"{% if app == 'execution' %} aria-current="page"{% endif %}>Trading</a>
+<a href="{% url 'risk:decisions' %}"{% if app == 'risk' %} aria-current="page"{% endif %}>Risk</a>
+</div></div>
+</nav>{% endif %}<div class="header-right"><span class="badge">DAILY MARKET DATA</span>{% if user.is_authenticated %}<div class="navgroup navgroup-right"><button type="button" class="navgroup-btn" aria-haspopup="true" aria-expanded="false"{% if app == 'user' %} aria-current="true"{% endif %}>Account</button><div class="navgroup-menu">
+<a href="{% url 'user:profile' %}"{% if app == 'user' %} aria-current="page"{% endif %}>Profile</a>
+<a href="/admin/">Admin</a>
+<a href="/api/">API</a>
+<form method="post" action="{% url 'marketdata:logout' %}">{% csrf_token %}<button class="text-button">Sign out</button></form>
+</div></div>{% endif %}</div>{% endwith %}</header>
 {% block content %}{% endblock %}
 <footer>PSX Observatory <span>Historical prices · Stored in your app database · PKR</span></footer>
+<script>
+(function () {
+  var groups = Array.prototype.slice.call(document.querySelectorAll(".navgroup"));
+  function closeAll(except) {
+    groups.forEach(function (g) {
+      if (g === except) return;
+      g.classList.remove("open");
+      var b = g.querySelector(".navgroup-btn");
+      if (b) b.setAttribute("aria-expanded", "false");
+    });
+  }
+  groups.forEach(function (g) {
+    var btn = g.querySelector(".navgroup-btn");
+    if (!btn) return;
+    btn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      var open = g.classList.toggle("open");
+      btn.setAttribute("aria-expanded", open ? "true" : "false");
+      closeAll(g);
+    });
+  });
+  document.addEventListener("click", function () { closeAll(null); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    var openGroup = document.querySelector(".navgroup.open");
+    closeAll(null);
+    if (openGroup) {
+      var b = openGroup.querySelector(".navgroup-btn");
+      if (b) b.focus();
+    }
+  });
+})();
+</script>
 </body></html>

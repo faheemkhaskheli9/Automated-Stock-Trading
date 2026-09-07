@@ -13,22 +13,58 @@ class MenubarTests(TestCase):
     def _assert_app_links(self, response):
         self.assertContains(response, 'class="mainnav"')
         self.assertContains(response, reverse("marketdata:dashboard"))
+        self.assertContains(response, reverse("marketdata:instruments"))
+        self.assertContains(response, reverse("strategies:strategy_list"))
         self.assertContains(response, reverse("strategies:backtest"))
         self.assertContains(response, reverse("modeling:index"))
         self.assertContains(response, reverse("modeling:leaderboard"))
         self.assertContains(response, reverse("backtesting:index"))
         self.assertContains(response, reverse("forecasting:index"))
+        self.assertContains(response, reverse("signalfeed:index"))
+        self.assertContains(response, reverse("research:index"))
+        self.assertContains(response, reverse("portfolio:account_list"))
+        self.assertContains(response, reverse("execution:order_list"))
+        self.assertContains(response, reverse("risk:decisions"))
+        self.assertContains(response, reverse("user:profile"))
         self.assertContains(response, 'href="/admin/"')
         self.assertContains(response, 'href="/api/"')
 
+    def _assert_groups(self, response):
+        for label in ("Research", "Strategies", "Models", "Trading", "Account"):
+            self.assertContains(response, f">{label}</button>")
+        # Admin / API / Sign out live inside the right-side Account dropdown.
+        self.assertContains(response, "navgroup-right")
+        self.assertContains(response, reverse("marketdata:logout"))
+
     def test_menubar_present_on_dashboard(self):
-        self._assert_app_links(self.client.get("/"))
+        response = self.client.get("/")
+        self._assert_app_links(response)
+        self._assert_groups(response)
 
     def test_menubar_shared_across_apps(self):
-        self._assert_app_links(self.client.get("/backtesting/"))
-        self._assert_app_links(self.client.get("/modeling/"))
-        self._assert_app_links(self.client.get("/backtests/"))
-        self._assert_app_links(self.client.get("/forecast-backtests/"))
+        for path in ("/backtesting/", "/modeling/", "/backtests/", "/forecast-backtests/"):
+            response = self.client.get(path)
+            self._assert_app_links(response)
+            self._assert_groups(response)
+
+    def test_group_button_marks_active_section(self):
+        # Any page under modeling / backtesting / forecasting lights the Models group.
+        content = self.client.get("/backtests/").content.decode()
+        self.assertIn(
+            'class="navgroup-btn" aria-haspopup="true" aria-expanded="false" aria-current="true">Models</button>',
+            content,
+        )
+        self.assertIn(
+            'class="navgroup-btn" aria-haspopup="true" aria-expanded="false">Trading</button>',
+            content,
+        )
+
+    def test_research_group_covers_instruments(self):
+        content = self.client.get(reverse("marketdata:instruments")).content.decode()
+        self.assertIn('aria-current="true">Research</button>', content)
+        self.assertIn(f'href="{reverse("marketdata:instruments")}" aria-current="page"', content)
+        # Market Data link must not also claim the current page.
+        self.assertNotIn(f'href="{reverse("marketdata:dashboard")}" aria-current="page"', content)
 
     def test_model_backtests_section_marked_active(self):
         content = self.client.get("/backtests/").content.decode()
