@@ -22,7 +22,7 @@
   <div class="panel table-scroll">
     <table>
       <thead>
-        <tr><th>Symbol</th><th>Model</th><th>Active</th><th>Min acc.</th><th>Min skill</th><th>Min move %</th><th>Gate</th><th></th></tr>
+        <tr><th>Symbol</th><th>Model</th><th>Active</th><th>Min acc.</th><th>Min skill</th><th>Min move %</th><th>Sizing cap.</th><th>Max pos %</th><th>Kelly</th><th>Gate</th><th></th></tr>
       </thead>
       <tbody>
       {% for item, gate in rows %}
@@ -33,6 +33,9 @@
           <td>{{ item.min_directional_accuracy|floatformat:2 }}</td>
           <td>{{ item.min_skill|floatformat:2 }}</td>
           <td>{{ item.min_expected_move_pct|floatformat:2 }}</td>
+          <td>{% if item.sizing_capital %}{{ item.sizing_capital|floatformat:0 }}{% else %}<span class="muted">off</span>{% endif %}</td>
+          <td>{{ item.max_position_pct|floatformat:1 }}</td>
+          <td>{{ item.kelly_fraction|floatformat:2 }}</td>
           <td class="{% if gate.passed %}gate-pass{% else %}gate-block{% endif %}">
             {% if gate.passed %}pass{% else %}blocked{% endif %} &mdash; {{ gate.reason }}
           </td>
@@ -48,7 +51,7 @@
           </td>
         </tr>
       {% empty %}
-        <tr><td colspan="8" class="empty">No watch items yet. <a href="{% url 'signalfeed:watch_create' %}">Add one</a>.</td></tr>
+        <tr><td colspan="11" class="empty">No watch items yet. <a href="{% url 'signalfeed:watch_create' %}">Add one</a>.</td></tr>
       {% endfor %}
       </tbody>
     </table>

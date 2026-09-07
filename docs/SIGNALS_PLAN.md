@@ -70,9 +70,29 @@ have error bars wider than the estimate. Run advisory-only for at least a
 quarter and watch the recap hit-rate before trading on it; when you do,
 sizing and loss limits still go through the `risk` app.
 
+## Position sizing (advisory)
+
+Each `WatchItem` can carry a sizing config - `sizing_capital` (the notional
+pool one call is sized against; `0` = off, the default), `max_position_pct`
+(hard cap per call, default 10%), `kelly_fraction` (fraction of the model's
+directional edge to bet, default 0.5 = half-Kelly; `0` sizes flat at the
+cap). For a *deliverable* UP/DOWN call, `generate_weekly_signals` computes a
+`suggested_fraction` / `suggested_notional` / `suggested_shares` and a
+`sizing_basis` audit snapshot on the `WeeklySignal`, shown on the `/signals/`
+card and printed in the delivered message. Method (`signalfeed/sizing.py`):
+
+```
+edge     = max(0, 2 * directional_accuracy - 1)   # 0 at 50%, 1 at 100%
+fraction = min(kelly_fraction * edge, max_position_pct / 100)
+shares   = floor(capital * fraction / reference_close)
+```
+
+Magnitude is deliberately *not* a divisor (the Kelly small-move blow-up).
+Suppressed / flat / error signals get no hint. **Still advisory only - no
+order is ever placed.**
+
 ## Not done / deferred
 
 - No service worker / offline PWA support (manifest only).
 - No auto-execution path (deliberate - advisory only).
-- No per-signal position sizing.
 - Telegram is one-recipient (single `TELEGRAM_CHAT_ID`), not multi-user.

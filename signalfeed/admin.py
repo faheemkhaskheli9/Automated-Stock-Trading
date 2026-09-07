@@ -12,6 +12,7 @@ class WatchItemAdmin(admin.ModelAdmin):
         "min_directional_accuracy",
         "min_skill",
         "min_expected_move_pct",
+        "sizing_capital",
     )
     list_filter = ("is_active", "trading_model")
     search_fields = ("instrument__symbol", "trading_model__name")
@@ -26,6 +27,7 @@ class WeeklySignalAdmin(admin.ModelAdmin):
         "target_date",
         "direction",
         "expected_return_pct",
+        "suggested_shares",
         "status",
         "was_correct",
         "actual_return_pct",

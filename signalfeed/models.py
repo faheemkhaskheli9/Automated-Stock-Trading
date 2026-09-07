@@ -50,6 +50,26 @@ class WatchItem(models.Model):
         help_text="A predicted move smaller than this (in %) is reported FLAT "
         "and not delivered - it is not worth trading.",
     )
+    sizing_capital = models.DecimalField(
+        max_digits=14,
+        decimal_places=2,
+        default=0,
+        blank=True,
+        help_text="Notional pool a single delivered call is sized against. "
+        "0 disables the position-sizing hint. Advisory only - no order is placed.",
+    )
+    max_position_pct = models.FloatField(
+        default=10.0,
+        blank=True,
+        help_text="Hard cap on one call's suggested size, as a %% of sizing_capital.",
+    )
+    kelly_fraction = models.FloatField(
+        default=0.5,
+        blank=True,
+        help_text="Fraction of the model's directional edge to bet "
+        "(0.5 = half-Kelly). 0 sizes flat at max_position_pct for every "
+        "deliverable call.",
+    )
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -67,6 +87,15 @@ class WatchItem(models.Model):
 
     def clean(self):
         errors = {}
+        # Sizing config is optional in forms - fall back to the field defaults
+        # so a blank submission means "use the defaults", not "invalid".
+        if self.sizing_capital is None:
+            self.sizing_capital = 0
+        if self.max_position_pct is None:
+            self.max_position_pct = 10.0
+        if self.kelly_fraction is None:
+            self.kelly_fraction = 0.5
+
         spec = self.trading_model.target_spec if self.trading_model_id else None
         ttype = spec.get("type") if isinstance(spec, dict) else None
         if ttype not in SUPPORTED_TARGETS:
@@ -78,6 +107,12 @@ class WatchItem(models.Model):
             errors["min_directional_accuracy"] = "Must be between 0 and 1."
         if self.min_expected_move_pct < 0:
             errors["min_expected_move_pct"] = "Must be >= 0."
+        if self.sizing_capital is not None and self.sizing_capital < 0:
+            errors["sizing_capital"] = "Must be >= 0."
+        if not 0.0 < self.max_position_pct <= 100.0:
+            errors["max_position_pct"] = "Must be between 0 (exclusive) and 100."
+        if not 0.0 <= self.kelly_fraction <= 1.0:
+            errors["kelly_fraction"] = "Must be between 0 and 1."
         if errors:
             raise ValidationError(errors)
 
@@ -129,6 +164,17 @@ class WeeklySignal(models.Model):
         null=True, blank=True, help_text="Model's trailing directional accuracy at send time."
     )
     model_stats = models.JSONField(default=dict, blank=True)
+
+    # Advisory position-sizing hint (only populated for a deliverable UP/DOWN
+    # call whose watch item has sizing_capital > 0). No order is ever placed.
+    suggested_fraction = models.FloatField(
+        null=True, blank=True, help_text="Suggested fraction of sizing_capital for this call."
+    )
+    suggested_notional = models.FloatField(null=True, blank=True)
+    suggested_shares = models.IntegerField(null=True, blank=True)
+    sizing_basis = models.JSONField(
+        default=dict, blank=True, help_text="Snapshot of the sizing inputs, for audit."
+    )
 
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.PENDING)
     suppression_reason = models.CharField(max_length=255, blank=True)

@@ -453,13 +453,24 @@ live trading stays a separate, gated phase). Routed at `/signals/`.
 
 - `models.py`: `WatchItem` (instrument + `trading_model` + the accuracy bar
   that model must clear: `min_directional_accuracy` / `min_skill` /
-  `min_expected_move_pct`; `clean()` restricts the model's target to
-  `weekday_anchored`/`horizon_close`/`horizon_return`/`direction`),
+  `min_expected_move_pct`; plus an optional advisory sizing config -
+  `sizing_capital` (0 = off), `max_position_pct` (default 10), `kelly_fraction`
+  (default 0.5 = half-Kelly, 0 = flat at the cap); `clean()` restricts the
+  model's target to `weekday_anchored`/`horizon_close`/`horizon_return`/
+  `direction` and coerces blank sizing fields to their defaults),
   `WeeklySignal` (one call per Friday, kept even when suppressed/errored:
   `direction` UP/DOWN/FLAT, `expected_return_pct`, `predicted_close`,
   `reference_close`, `model_stats` snapshot, `status`
-  pending/sent/suppressed/error, then `actual_close`/`actual_return_pct`/
-  `was_correct` backfilled later; unique per (instrument, model, target_date)).
+  pending/sent/suppressed/error, `suggested_fraction`/`suggested_notional`/
+  `suggested_shares`/`sizing_basis` (advisory sizing hint, only for a
+  deliverable UP/DOWN call whose watch item set `sizing_capital`), then
+  `actual_close`/`actual_return_pct`/`was_correct` backfilled later; unique per
+  (instrument, model, target_date)).
+- `sizing.py` `suggest_size(...)` -> `SizeSuggestion` - pure, no order placed:
+  `edge = max(0, 2*directional_accuracy - 1)`, `fraction = min(kelly_fraction *
+  edge, max_position_pct/100)`, `shares = floor(capital*fraction/reference_close)`.
+  Magnitude is intentionally not a divisor. `generate_weekly_signals` calls it
+  for PENDING UP/DOWN signals; `_format_signal` prints a "Suggested size" line.
 - `gate.py` `evaluate_gate(item)` -> `GateResult`: prefers live
   out-of-sample numbers from `modeling.leaderboard.build_leaderboard`, falls
   back to the model's last-training `metrics["holdout"]`; suppresses (with a

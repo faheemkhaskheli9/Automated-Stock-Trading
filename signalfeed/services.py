@@ -115,6 +115,20 @@ def _interpret(ttype, pred, reference_close, flat_threshold_pct):
     return predicted_close, expected_return_pct, direction
 
 
+def _size_hint(item, direction, stats, reference_close):
+    """Advisory position-sizing hint for a deliverable call (or ``None``)."""
+    from .sizing import suggest_size
+
+    return suggest_size(
+        direction=direction,
+        directional_accuracy=(stats or {}).get("directional_accuracy"),
+        capital=float(item.sizing_capital or 0.0),
+        max_position_pct=item.max_position_pct,
+        kelly_fraction=item.kelly_fraction,
+        reference_close=reference_close,
+    )
+
+
 def _format_signal(sig):
     arrow = {"up": "▲", "down": "▼", "flat": "▬"}.get(sig.direction, "")
     sym = sig.instrument.symbol
@@ -128,6 +142,13 @@ def _format_signal(sig):
     if sig.predicted_close is not None:
         ref = f" (from {sig.reference_close:.2f})" if sig.reference_close else ""
         lines.append(f"Predicted close: {sig.predicted_close:.2f}{ref}")
+    if sig.suggested_shares:
+        cap = (sig.sizing_basis or {}).get("capital")
+        cap_txt = f" of {cap:,.0f}" if cap else ""
+        lines.append(
+            f"Suggested size: {sig.suggested_shares:,} sh "
+            f"(~{sig.suggested_notional:,.0f}, {sig.suggested_fraction:.1%}{cap_txt})"
+        )
     st = sig.model_stats or {}
     if st.get("directional_accuracy") is not None:
         extra = ""
@@ -187,6 +208,11 @@ def generate_weekly_signals(as_of: date | None = None) -> list[SignalOutcome]:
             "flat_threshold_pct": item.min_expected_move_pct,
             "model_stats": gate.stats,
             "confidence": gate.stats.get("directional_accuracy"),
+            # No sizing hint unless the call below turns out deliverable.
+            "suggested_fraction": None,
+            "suggested_notional": None,
+            "suggested_shares": None,
+            "sizing_basis": {},
         }
 
         try:
@@ -223,12 +249,25 @@ def generate_weekly_signals(as_of: date | None = None) -> list[SignalOutcome]:
             ttype, pred, reference_close, item.min_expected_move_pct
         )
         status = WeeklySignal.Status.PENDING if gate.passed else WeeklySignal.Status.SUPPRESSED
+
+        size_defaults = {}
+        if status == WeeklySignal.Status.PENDING:
+            size = _size_hint(item, direction, gate.stats, reference_close)
+            if size is not None:
+                size_defaults = {
+                    "suggested_fraction": size.fraction,
+                    "suggested_notional": size.notional,
+                    "suggested_shares": size.shares,
+                    "sizing_basis": size.basis,
+                }
+
         sig, _ = WeeklySignal.objects.update_or_create(
             instrument=item.instrument,
             trading_model=model,
             target_date=target_date,
             defaults={
                 **base_defaults,
+                **size_defaults,
                 "model_prediction": pred,
                 "direction": direction,
                 "predicted_close": predicted_close,

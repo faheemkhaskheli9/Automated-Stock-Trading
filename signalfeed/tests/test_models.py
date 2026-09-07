@@ -40,6 +40,35 @@ def test_watchitem_rejects_out_of_range_accuracy():
         item.full_clean()
 
 
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("sizing_capital", -1),
+        ("max_position_pct", 0),
+        ("max_position_pct", 150),
+        ("kelly_fraction", -0.1),
+        ("kelly_fraction", 1.5),
+    ],
+)
+def test_watchitem_rejects_bad_sizing_config(field, value):
+    inst = make_instrument(f"S{field[:3]}{int(abs(value))}")
+    model = make_weekly_model([inst], train=False)
+    item = make_watch_item(inst, model)
+    setattr(item, field, value)
+    with pytest.raises(ValidationError) as exc:
+        item.full_clean()
+    assert field in exc.value.message_dict
+
+
+def test_watchitem_accepts_valid_sizing_config():
+    inst = make_instrument("SIZOK")
+    model = make_weekly_model([inst], train=False)
+    item = make_watch_item(
+        inst, model, sizing_capital=100000, max_position_pct=15.0, kelly_fraction=0.25
+    )
+    item.full_clean()  # must not raise
+
+
 def test_watchitem_unique_per_model():
     inst = make_instrument("OGDC")
     model = make_weekly_model([inst], train=False)

@@ -80,6 +80,9 @@ def test_edit_watch_item(client, user, watched):
             "min_directional_accuracy": "0.70",
             "min_skill": "0.0",
             "min_expected_move_pct": "2.0",
+            "sizing_capital": "250000",
+            "max_position_pct": "12.5",
+            "kelly_fraction": "0.25",
             "notes": "tightened",
         },
     )
@@ -87,6 +90,9 @@ def test_edit_watch_item(client, user, watched):
     item.refresh_from_db()
     assert item.min_directional_accuracy == pytest.approx(0.70)
     assert item.min_expected_move_pct == pytest.approx(2.0)
+    assert float(item.sizing_capital) == pytest.approx(250000)
+    assert item.max_position_pct == pytest.approx(12.5)
+    assert item.kelly_fraction == pytest.approx(0.25)
 
 
 def test_create_rejects_unsupported_target_model(client, user, db):

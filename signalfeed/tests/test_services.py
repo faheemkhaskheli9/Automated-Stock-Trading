@@ -52,6 +52,55 @@ def test_generate_builds_one_signal_with_direction_and_magnitude(watch):
     assert sig.expected_return_pct == pytest.approx(implied, rel=1e-6)
 
 
+def test_generate_populates_sizing_hint_for_deliverable_call():
+    inst = make_instrument("SIZE")
+    make_price_series(inst, n=420)
+    model = make_weekly_model([inst])
+    make_watch_item(inst, model, sizing_capital=100_000, max_position_pct=8.0)
+
+    sig = services.generate_weekly_signals(MON)[0].signal
+    assert sig.status == WeeklySignal.Status.PENDING
+    assert sig.direction in {WeeklySignal.Direction.UP, WeeklySignal.Direction.DOWN}
+    # perfectly-predictable series -> holdout accuracy 1.0 -> clamped to the cap
+    assert sig.suggested_fraction == pytest.approx(0.08)
+    assert sig.suggested_notional == pytest.approx(8_000.0)
+    assert sig.suggested_shares == int(8_000.0 // sig.reference_close)
+    assert sig.sizing_basis["capital"] == 100_000.0
+
+
+def test_generate_no_sizing_hint_when_capital_zero(watch):
+    sig = services.generate_weekly_signals(MON)[0].signal
+    assert sig.suggested_fraction is None
+    assert sig.suggested_shares is None
+    assert sig.sizing_basis == {}
+
+
+def test_generate_no_sizing_hint_when_suppressed(watch, monkeypatch):
+    item, _, _ = watch
+    monkeypatch.setattr(
+        "signalfeed.gate._holdout_stats",
+        lambda m: {"source": "holdout", "n": 20, "directional_accuracy": 0.50, "skill": 0.0},
+    )
+    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m: None)
+    item.sizing_capital = 100_000
+    item.min_directional_accuracy = 0.60
+    item.save(update_fields=["sizing_capital", "min_directional_accuracy"])
+
+    sig = services.generate_weekly_signals(MON)[0].signal
+    assert sig.status == WeeklySignal.Status.SUPPRESSED
+    assert sig.suggested_shares is None
+
+
+def test_format_signal_includes_size_line(watch):
+    item, _, _ = watch
+    item.sizing_capital = 100_000
+    item.save(update_fields=["sizing_capital"])
+    services.generate_weekly_signals(MON)
+    sig = WeeklySignal.objects.get()
+    _, message = services._format_signal(sig)
+    assert "Suggested size" in message
+
+
 def test_generate_is_idempotent_upsert(watch):
     services.generate_weekly_signals(MON)
     services.generate_weekly_signals(MON)

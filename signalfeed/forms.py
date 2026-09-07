@@ -34,6 +34,9 @@ class WatchItemForm(forms.ModelForm):
             "min_directional_accuracy",
             "min_skill",
             "min_expected_move_pct",
+            "sizing_capital",
+            "max_position_pct",
+            "kelly_fraction",
             "notes",
         ]
         widgets = {"notes": forms.Textarea(attrs={"rows": 2})}
