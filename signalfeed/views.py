@@ -3,6 +3,7 @@ from datetime import date, timedelta
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -16,6 +17,8 @@ from .models import WatchItem, WeeklySignal
 logger = logging.getLogger(__name__)
 
 ACCURACY_WINDOW_DAYS = 90
+RECENT_PAGE_SIZE = 50
+WATCH_PAGE_SIZE = 25
 _RUN_ACTIONS = {"generate", "send", "train", "recap"}
 
 
@@ -35,13 +38,13 @@ def index(request):
     friendly: the page links a web manifest so it can be added to a phone
     home screen."""
     today = timezone.localdate()
-    signals = list(
-        WeeklySignal.objects.select_related("instrument", "trading_model").order_by(
-            "-target_date", "instrument__symbol"
-        )[:100]
+    qs = WeeklySignal.objects.select_related("instrument", "trading_model").order_by(
+        "-target_date", "instrument__symbol"
     )
-    latest_target = signals[0].target_date if signals else None
-    current = [s for s in signals if s.target_date == latest_target] if latest_target else []
+    first = qs.first()
+    latest_target = first.target_date if first else None
+    current = list(qs.filter(target_date=latest_target)) if latest_target else []
+    recent = Paginator(qs, RECENT_PAGE_SIZE).get_page(request.GET.get("page"))
 
     graded = WeeklySignal.objects.filter(
         was_correct__isnull=False,
@@ -57,7 +60,7 @@ def index(request):
         {
             "current": current,
             "latest_target": latest_target,
-            "recent": signals,
+            "recent": recent,
             "watch_count": WatchItem.objects.filter(is_active=True).count(),
             "window_days": ACCURACY_WINDOW_DAYS,
             "hit_total": total,
@@ -72,8 +75,9 @@ def index(request):
 def watchlist(request):
     """Every watch item + its model's live gate verdict."""
     items = WatchItem.objects.select_related("instrument", "trading_model")
-    rows = [(item, evaluate_gate(item)) for item in items]
-    return render(request, "signalfeed/watchlist.html", {"rows": rows})
+    page = Paginator(items, WATCH_PAGE_SIZE).get_page(request.GET.get("page"))
+    rows = [(item, evaluate_gate(item)) for item in page]
+    return render(request, "signalfeed/watchlist.html", {"rows": rows, "page": page})
 
 
 @login_required(login_url="marketdata:login")

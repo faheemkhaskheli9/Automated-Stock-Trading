@@ -41,6 +41,7 @@
         {% endfor %}
         </tbody>
       </table>
+      {% include "marketdata/_pagination.html" with page=snapshots param="snap" query=snap_query %}
     </div>
 
     <div class="panel table-scroll">
@@ -60,6 +61,7 @@
         {% endfor %}
         </tbody>
       </table>
+      {% include "marketdata/_pagination.html" with page=headlines param="news" query=news_query %}
     </div>
   </div>
 
@@ -81,6 +83,7 @@
       {% endfor %}
       </tbody>
     </table>
+    {% include "marketdata/_pagination.html" with page=fundamentals param="fund" query=fund_query %}
   </div>
 </main>
 {% endblock %}

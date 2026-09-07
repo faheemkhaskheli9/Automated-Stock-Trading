@@ -55,6 +55,7 @@
       {% endfor %}
       </tbody>
     </table>
+    {% include "marketdata/_pagination.html" with page=page query=query %}
   </div>
 </main>
 {% endblock %}

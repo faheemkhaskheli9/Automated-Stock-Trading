@@ -13,6 +13,7 @@ from datetime import timezone as py_timezone
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
@@ -26,6 +27,11 @@ from .services import get_or_build_snapshot
 
 logger = logging.getLogger(__name__)
 
+# Page sizes for the three independent tables on the research index.
+SNAPSHOT_PAGE_SIZE = 25
+HEADLINE_PAGE_SIZE = 25
+FUNDAMENTAL_PAGE_SIZE = 25
+
 
 def _as_of_datetime(day):
     if day is None:
@@ -36,9 +42,25 @@ def _as_of_datetime(day):
 @login_required(login_url="marketdata:login")
 @require_http_methods(["GET"])
 def index(request):
-    snapshots = ResearchSnapshot.objects.order_by("-as_of", "symbol")[:50]
-    headlines = NewsItem.objects.order_by("-published_at")[:20]
-    fundamentals = CompanyFundamental.objects.order_by("symbol", "-as_of_report_date")[:50]
+    snapshots = Paginator(
+        ResearchSnapshot.objects.order_by("-as_of", "symbol"), SNAPSHOT_PAGE_SIZE
+    ).get_page(request.GET.get("snap"))
+    headlines = Paginator(NewsItem.objects.order_by("-published_at"), HEADLINE_PAGE_SIZE).get_page(
+        request.GET.get("news")
+    )
+    fundamentals = Paginator(
+        CompanyFundamental.objects.order_by("symbol", "-as_of_report_date"),
+        FUNDAMENTAL_PAGE_SIZE,
+    ).get_page(request.GET.get("fund"))
+
+    def _keep(own):
+        """Current page params for the other two tables, so paging one table
+        doesn't reset the others."""
+        q = request.GET.copy()
+        q.pop(own, None)
+        q.pop("page", None)
+        return q.urlencode()
+
     return render(
         request,
         "research/index.html",
@@ -46,6 +68,9 @@ def index(request):
             "snapshots": snapshots,
             "headlines": headlines,
             "fundamentals": fundamentals,
+            "snap_query": _keep("snap"),
+            "news_query": _keep("news"),
+            "fund_query": _keep("fund"),
             "form": SyncForm(initial={"exchange": "PSX"}),
             "news_total": NewsItem.objects.count(),
             "snapshot_total": ResearchSnapshot.objects.count(),

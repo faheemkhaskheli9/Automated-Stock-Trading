@@ -1,0 +1,16 @@
+{% comment %}
+Shared pager for server-rendered list pages. Params:
+  page  - a django.core.paginator.Page (required)
+  query - urlencoded querystring WITHOUT the page param (optional; preserves
+          filters / search across page changes)
+  param - name of the page query parameter (optional, default "page"; set a
+          distinct value when one page hosts more than one independent pager)
+{% endcomment %}
+{% if page.has_other_pages %}
+{% firstof param "page" as pp %}
+<nav class="pagination" aria-label="Pagination">
+  {% if page.has_previous %}<a href="?{% if query %}{{ query }}&amp;{% endif %}{{ pp }}={{ page.previous_page_number }}">&larr; Previous</a>{% endif %}
+  <span>Page {{ page.number }} of {{ page.paginator.num_pages }} &middot; {{ page.paginator.count }} row{{ page.paginator.count|pluralize }}</span>
+  {% if page.has_next %}<a href="?{% if query %}{{ query }}&amp;{% endif %}{{ pp }}={{ page.next_page_number }}">Next &rarr;</a>{% endif %}
+</nav>
+{% endif %}

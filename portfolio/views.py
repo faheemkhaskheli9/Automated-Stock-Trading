@@ -10,11 +10,14 @@ from decimal import Decimal
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
 from .forms import AccountForm
 from .models import Account
+
+ACCOUNT_PAGE_SIZE = 25
 
 
 def _scoped(request):
@@ -28,15 +31,16 @@ def _scoped(request):
 @require_http_methods(["GET"])
 def account_list(request):
     accounts = _scoped(request).select_related("owner").prefetch_related("positions")
+    page = Paginator(accounts, ACCOUNT_PAGE_SIZE).get_page(request.GET.get("page"))
     rows = [
         {
             "obj": a,
             "equity": a.equity,
             "positions": a.positions.count(),
         }
-        for a in accounts
+        for a in page
     ]
-    return render(request, "portfolio/account_list.html", {"rows": rows})
+    return render(request, "portfolio/account_list.html", {"rows": rows, "page": page})
 
 
 @login_required(login_url="marketdata:login")

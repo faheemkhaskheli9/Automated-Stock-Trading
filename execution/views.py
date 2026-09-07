@@ -14,9 +14,11 @@ Paper broker only. There is no live-broker path (Phase 6, gated).
 from __future__ import annotations
 
 import logging
+from urllib.parse import urlencode
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
@@ -30,6 +32,8 @@ from .services import place_order as place_order_service
 from .tasks import run_trading_cycle
 
 logger = logging.getLogger(__name__)
+
+ORDER_PAGE_SIZE = 50
 
 
 def _scoped_orders(request):
@@ -46,11 +50,14 @@ def order_list(request):
     status = request.GET.get("status")
     if status in Order.Status.values:
         orders = orders.filter(status=status)
+    page = Paginator(orders, ORDER_PAGE_SIZE).get_page(request.GET.get("page"))
     return render(
         request,
         "execution/order_list.html",
         {
-            "orders": orders[:200],
+            "orders": page,
+            "page": page,
+            "query": urlencode({"status": status}) if status in Order.Status.values else "",
             "status": status or "",
             "statuses": Order.Status.choices,
             "can_run_cycle": request.user.is_staff,

@@ -17,6 +17,7 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -26,12 +27,16 @@ from .models import ForecastBacktestRun
 
 logger = logging.getLogger(__name__)
 
+RUN_PAGE_SIZE = 25
+
 
 @login_required(login_url="marketdata:login")
 @require_http_methods(["GET"])
 def index(request):
-    runs = ForecastBacktestRun.objects.all()[:100]
-    return render(request, "forecasting/index.html", {"runs": runs})
+    page = Paginator(ForecastBacktestRun.objects.all(), RUN_PAGE_SIZE).get_page(
+        request.GET.get("page")
+    )
+    return render(request, "forecasting/index.html", {"runs": page, "page": page})
 
 
 @login_required(login_url="marketdata:login")

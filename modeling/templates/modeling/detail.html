@@ -60,10 +60,11 @@ estimator_params = {{ model.estimator_params }}</pre>
     <table>
       <thead><tr><th>Instrument</th><th>As of</th><th>Target date</th><th>Predicted</th><th>Actual</th><th>Abs error</th></tr></thead>
       <tbody>
-      {% for p in predictions %}<tr><td>{{ p.instrument.symbol }}</td><td>{{ p.as_of|date:"Y-m-d" }}</td><td>{{ p.target_date }}</td><td>{{ p.predicted_value|floatformat:4 }}</td><td>{{ p.actual_value|floatformat:4|default:"&mdash;" }}</td><td>{{ p.abs_error|floatformat:4|default:"&mdash;" }}</td></tr>
+      {% for p in prediction_page %}<tr><td>{{ p.instrument.symbol }}</td><td>{{ p.as_of|date:"Y-m-d" }}</td><td>{{ p.target_date }}</td><td>{{ p.predicted_value|floatformat:4 }}</td><td>{{ p.actual_value|floatformat:4|default:"&mdash;" }}</td><td>{{ p.abs_error|floatformat:4|default:"&mdash;" }}</td></tr>
       {% empty %}<tr><td colspan="6" class="empty">No predictions stored.</td></tr>{% endfor %}
       </tbody>
     </table>
+    {% include "marketdata/_pagination.html" with page=prediction_page %}
   </div>
 </main>
 {% endblock %}

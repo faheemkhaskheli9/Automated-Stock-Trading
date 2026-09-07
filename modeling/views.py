@@ -3,6 +3,7 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
+from django.core.paginator import Paginator
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -15,12 +16,18 @@ from .registry import catalogue
 
 logger = logging.getLogger(__name__)
 
+MODEL_PAGE_SIZE = 25
+PREDICTION_PAGE_SIZE = 50
+# Rows fed to the predicted-vs-actual chart / rolling-MAE stat on the detail page.
+PREDICTION_CHART_ROWS = 200
+
 
 @login_required(login_url="marketdata:login")
 @require_http_methods(["GET"])
 def index(request):
     models = TradingModel.objects.prefetch_related("instruments")
-    return render(request, "modeling/index.html", {"models": models})
+    page = Paginator(models, MODEL_PAGE_SIZE).get_page(request.GET.get("page"))
+    return render(request, "modeling/index.html", {"models": page, "page": page})
 
 
 @login_required(login_url="marketdata:login")
@@ -58,7 +65,11 @@ def detail(request, pk):
             messages.error(request, f"Training failed: {run.error}")
         return redirect("modeling:detail", pk=model.pk)
 
-    predictions = list(model.predictions.select_related("instrument")[:200])
+    prediction_qs = model.predictions.select_related("instrument")
+    predictions = list(prediction_qs[:PREDICTION_CHART_ROWS])
+    prediction_page = Paginator(prediction_qs, PREDICTION_PAGE_SIZE).get_page(
+        request.GET.get("page")
+    )
     if request.GET.get("export") == "csv":
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="model-{model.pk}-predictions.csv"'
@@ -110,6 +121,7 @@ def detail(request, pk):
             "model": model,
             "runs": model.runs.all()[:20],
             "predictions": predictions,
+            "prediction_page": prediction_page,
             "points": points,
             "rolling_mae": mae,
             "scored_count": len(scored),

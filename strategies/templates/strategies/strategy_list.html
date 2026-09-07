@@ -38,6 +38,7 @@
       {% endfor %}
       </tbody>
     </table>
+    {% include "marketdata/_pagination.html" with page=page %}
   </div>
   <p class="muted">A strategy with no account is never traded live — only backtested. Activate one only when its account and params are right.</p>
 </main>
