@@ -1,0 +1,86 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+  <div class="intro">
+    <div><p class="eyebrow">MODEL SEARCH</p><h1>{{ search.name }}</h1><p class="muted">{{ search.task }} &middot; target: {{ search.target_spec.type }} &middot; ranking by <strong>{{ score_key }}</strong> &middot; {{ search.get_mode_display }}</p></div>
+    <div>
+      <a class="secondary" href="{% url 'modelsearch:edit' search.pk %}">Edit</a>
+      <form method="post" class="inline-form"><input type="hidden" name="action" value="run">{% csrf_token %}<button class="primary" type="submit">Run search</button></form>
+    </div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="panel controls">
+    <h2>Configuration</h2>
+    <p class="muted">Instruments: {% for i in search.instruments.all %}{{ i.symbol }}{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}</p>
+    <p class="muted">Train window: {{ search.train_start|default:"(all)" }} &rarr; {{ search.train_end|default:"(all)" }} &middot; holdout {{ search.holdout_fraction }} &middot; max {{ search.max_candidates }} candidates</p>
+    <pre class="spec">feature_spec  = {{ search.feature_spec }}
+target_spec   = {{ search.target_spec }}
+search_space  = {{ search.search_space }}</pre>
+  </div>
+
+  {% if latest_run %}
+  <div class="panel">
+    <h2 class="panel-title">Latest run</h2>
+    <div class="metric-cards">
+      <div class="card"><div class="k">Status</div><div class="v">{{ latest_run.status }}</div></div>
+      <div class="card"><div class="k">Scored</div><div class="v">{{ latest_run.candidates_ok|default:0 }}/{{ latest_run.candidates_total|default:0 }}</div></div>
+      <div class="card"><div class="k">Failed</div><div class="v">{{ latest_run.candidates_failed|default:0 }}</div></div>
+      <div class="card"><div class="k">Rows</div><div class="v">{{ latest_run.dataset_rows|default:"&mdash;" }}</div></div>
+      <div class="card"><div class="k">Features</div><div class="v">{{ latest_run.feature_count|default:"&mdash;" }}</div></div>
+    </div>
+    {% if latest_run.error %}<div class="notice error">{{ latest_run.error }}</div>{% endif %}
+  </div>
+  {% endif %}
+
+  {% if scatter %}
+  <div class="panel chart chart-lines">
+    <h2 class="panel-title">Accuracy vs fit time <span class="muted">(higher-left is better; ringed = Pareto front)</span></h2>
+    <svg viewBox="0 0 320 160" preserveAspectRatio="none" role="img" aria-label="Score versus fit time scatter">
+      <line class="axis" x1="10" y1="150" x2="310" y2="150"></line>
+      <line class="axis" x1="10" y1="10" x2="10" y2="150"></line>
+      {% for d in scatter.dots %}
+      <circle class="ms-dot{% if d.pareto %} ms-dot-pareto{% endif %}" cx="{{ d.cx }}" cy="{{ d.cy }}" r="{% if d.pareto %}5{% else %}3.5{% endif %}"><title>{{ d.label }}</title></circle>
+      {% endfor %}
+    </svg>
+    <div class="chart-dates"><span>fit {{ scatter.xlo|floatformat:2 }}s</span><span>{{ scatter.xhi|floatformat:2 }}s</span></div>
+  </div>
+  {% endif %}
+
+  <div class="panel table-scroll">
+    <h2 class="panel-title">Candidates</h2>
+    <table>
+      <thead><tr><th>#</th><th>Estimator</th><th>Params</th><th>Score</th>{% for c in metric_cols %}<th>{{ c }}</th>{% endfor %}<th>Fit s</th><th>Predict ms/row</th><th>Size KB</th><th>Pareto</th><th></th></tr></thead>
+      <tbody>
+      {% for r in results %}
+        <tr>
+          <td>{{ r.rank|default:"&mdash;" }}</td>
+          <td>{{ r.estimator_key }}</td>
+          <td>{% if r.status == 'failed' %}<span class="muted" title="{{ r.error }}">failed</span>{% else %}<code>{{ r.estimator_params }}</code>{% endif %}</td>
+          <td>{{ r.score|floatformat:4|default:"&mdash;" }}</td>
+          {% for v in r.display_metrics %}<td>{{ v|default:"&mdash;" }}</td>{% endfor %}
+          <td>{{ r.fit_seconds|floatformat:3|default:"&mdash;" }}</td>
+          <td>{{ r.predict_latency_ms|floatformat:3|default:"&mdash;" }}</td>
+          <td>{% if r.model_size_bytes %}{% widthratio r.model_size_bytes 1024 1 %}{% else %}&mdash;{% endif %}</td>
+          <td>{% if r.is_pareto %}<span class="badge">Pareto</span>{% endif %}</td>
+          <td>{% if r.status == 'ok' %}<form method="post" class="inline-form"><input type="hidden" name="action" value="promote"><input type="hidden" name="result" value="{{ r.pk }}">{% csrf_token %}<button class="secondary" type="submit">Promote</button></form>{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="12" class="empty">No results yet. Press "Run search".</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel table-scroll">
+    <h2 class="panel-title">Runs</h2>
+    <table>
+      <thead><tr><th>#</th><th>Status</th><th>Started</th><th>Scored</th><th>Failed</th><th>Error</th></tr></thead>
+      <tbody>
+      {% for run in runs %}<tr><td>{{ run.pk }}</td><td>{{ run.status }}</td><td>{{ run.started_at|date:"Y-m-d H:i" }}</td><td>{{ run.candidates_ok|default:"&mdash;" }}</td><td>{{ run.candidates_failed|default:"&mdash;" }}</td><td>{{ run.error|truncatechars:80 }}</td></tr>
+      {% empty %}<tr><td colspan="6" class="empty">Never run.</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

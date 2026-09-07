@@ -18,6 +18,7 @@ class MenubarTests(TestCase):
         self.assertContains(response, reverse("strategies:backtest"))
         self.assertContains(response, reverse("modeling:index"))
         self.assertContains(response, reverse("modeling:leaderboard"))
+        self.assertContains(response, reverse("modelsearch:index"))
         self.assertContains(response, reverse("backtesting:index"))
         self.assertContains(response, reverse("forecasting:index"))
         self.assertContains(response, reverse("signalfeed:index"))
@@ -42,7 +43,13 @@ class MenubarTests(TestCase):
         self._assert_groups(response)
 
     def test_menubar_shared_across_apps(self):
-        for path in ("/backtesting/", "/modeling/", "/backtests/", "/forecast-backtests/"):
+        for path in (
+            "/backtesting/",
+            "/modeling/",
+            "/model-search/",
+            "/backtests/",
+            "/forecast-backtests/",
+        ):
             response = self.client.get(path)
             self._assert_app_links(response)
             self._assert_groups(response)
@@ -77,6 +84,11 @@ class MenubarTests(TestCase):
         marker = f'href="{reverse("forecasting:index")}" aria-current="page"'
         self.assertIn(marker, content)
         self.assertNotIn(f'href="{reverse("backtesting:index")}" aria-current="page"', content)
+
+    def test_model_search_lights_models_group(self):
+        content = self.client.get("/model-search/").content.decode()
+        self.assertIn('aria-current="true">Models</button>', content)
+        self.assertIn(f'href="{reverse("modelsearch:index")}" aria-current="page"', content)
 
     def test_active_section_marked(self):
         modeling = self.client.get("/modeling/").content.decode()

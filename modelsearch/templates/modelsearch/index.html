@@ -1,0 +1,30 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+  <div class="intro">
+    <div><p class="eyebrow">MODEL SEARCH</p><h1>Parameter &amp; model search</h1><p class="muted">Sweep several estimators and hyper-parameter grids over one trailing holdout; rank on accuracy and cost; promote the winner to a trading model.</p></div>
+    <div><a class="primary" href="{% url 'modelsearch:create' %}">New search</a> <a class="secondary" href="{% url 'modeling:estimators' %}">Estimator catalogue</a></div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+  <div class="panel table-scroll">
+    <table>
+      <thead><tr><th>Name</th><th>Base model</th><th>Target</th><th>Estimators</th><th>Mode</th><th>Last run</th><th>Best</th></tr></thead>
+      <tbody>
+      {% for s in searches %}
+        <tr>
+          <td><a href="{% url 'modelsearch:detail' s.pk %}">{{ s.name }}</a></td>
+          <td>{% if s.base_model %}{{ s.base_model.name }}{% else %}&mdash;{% endif %}</td>
+          <td>{{ s.target_spec.type }}</td>
+          <td>{{ s.search_space.estimators|length }}</td>
+          <td>{{ s.get_mode_display }}</td>
+          <td>{% with r=s.runs.first %}{% if r %}<span class="chip">{{ r.status }}</span> {{ r.started_at|date:"Y-m-d H:i" }}{% else %}&mdash;{% endif %}{% endwith %}</td>
+          <td>{% if s.best_result %}{{ s.best_result.estimator_key }} ({{ s.best_result.score|floatformat:3 }}){% else %}&mdash;{% endif %}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7" class="empty">No searches yet. <a href="{% url 'modelsearch:create' %}">Create one</a> from a trained model.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</main>
+{% endblock %}

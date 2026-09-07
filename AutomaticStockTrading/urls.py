@@ -21,6 +21,7 @@ from django.urls import include, path
 urlpatterns = [
     path("backtesting/", include("strategies.urls")),
     path("modeling/", include("modeling.urls")),
+    path("model-search/", include("modelsearch.urls")),
     path("backtests/", include("backtesting.urls")),
     path("forecast-backtests/", include("forecasting.urls")),
     path("signals/", include("signalfeed.urls")),

@@ -388,6 +388,10 @@ aside { align-self: start; overflow: hidden; }
 .login { max-width: 440px; margin: 80px auto; padding: 32px; }
 .login .primary { width: 100%; margin-top: 12px; }
 
+/* model search - accuracy vs cost scatter */
+.ms-dot { fill: var(--text-faint); }
+.ms-dot-pareto { fill: var(--brand); stroke: var(--brand-contrast); stroke-width: 1; }
+
 /* --- 6. responsive ------------------------------------------------ */
 @media (max-width: 1000px) {
   .backtest-layout { grid-template-columns: 1fr; }

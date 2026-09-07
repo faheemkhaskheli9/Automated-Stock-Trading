@@ -1,0 +1,35 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+  <div class="intro">
+    <div><p class="eyebrow">MODEL SEARCH</p><h1>{% if instance %}Edit search{% else %}New search{% endif %}</h1><p class="muted">Seed the spec / instruments / window from a trained model, then list the estimators and grids to sweep.</p></div>
+    <div><a class="secondary" href="{% url 'modelsearch:index' %}">Back</a></div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  {% if not instance %}
+  <form method="post" class="panel controls action-row">
+    {% csrf_token %}
+    <input type="hidden" name="op" value="load">
+    <div class="field-row">{{ form.base_model.label_tag }}{{ form.base_model }}</div>
+    <button class="secondary" type="submit">Load from base model</button>
+  </form>
+  {% endif %}
+
+  <form method="post" class="panel controls">
+    {% csrf_token %}
+    {{ form.non_field_errors }}
+    {% for field in form %}
+      {% if field.name != 'base_model' or instance %}
+      <div class="field-row">
+        {{ field.label_tag }}
+        {{ field }}
+        {% if field.help_text %}<small class="muted">{{ field.help_text }}</small>{% endif %}
+        {{ field.errors }}
+      </div>
+      {% endif %}
+    {% endfor %}
+    <button class="primary" type="submit">Save search</button>
+  </form>
+</main>
+{% endblock %}

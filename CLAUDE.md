@@ -21,9 +21,10 @@ phases per `docs/PLAN.md` (the full approved plan, with rationale):
   (see docs/PLAN.md) - not just code.
 - **Phase 7 (in progress)**: research/forecasting foundation - `research` (feature
   providers), `forecasting` (leakage-strict next-day predictors + walk-forward), the
-  parallel `modeling` studio, the `backtesting` walk-forward app, a server-rendered
-  operator dashboard ("PSX Observatory"), and Phase 7 DRF read endpoints. See the
-  per-app sections below and `docs/FORECASTING.md` / `docs/MODELING.md` /
+  parallel `modeling` studio, the `modelsearch` parameter/model-search module, the
+  `backtesting` walk-forward app, a server-rendered operator dashboard
+  ("PSX Observatory"), and Phase 7 DRF read endpoints. See the per-app sections
+  below and `docs/FORECASTING.md` / `docs/MODELING.md` / `docs/MODEL_SEARCH.md` /
   `docs/BACKTESTING.md`. Tracked task-by-task on GitHub Projects board #5.
 - **Phase 8 (in progress)**: `signalfeed` app - weekly Mon->Fri signal delivery
   (watchlist + accuracy gate + email/webhook/Telegram push + Friday recap),
@@ -363,6 +364,48 @@ actual-value backfill.
   `scikit-learn` to `requirements.txt`.
 
 Usage and the full feature/target reference: `docs/MODELING.md`.
+
+## `modelsearch` app (Phase 7, parameter / model search)
+
+Sweeps several estimators x hyper-parameter grids to find an efficient,
+accurate predictor, instead of hand-tuning one `modeling.TradingModel`.
+Routed at `/model-search/`. Adds no dependencies (reuses `modeling`).
+
+- A `ModelSearch` is **seeded from a base `TradingModel`** - it copies that
+  model's `feature_spec` / `target_spec` / instruments / train window /
+  `holdout_fraction` (field names kept identical to `TradingModel` so a
+  `ModelSearch` instance passes straight into `modeling.dataset.build_dataset`).
+- `search_space` JSON: `{"estimators": [...], "param_grids": {key: {param:
+  [values]}}}`. An estimator with no grid entry = one candidate at defaults.
+  `mode` `grid`/`random` (+ `max_candidates`, `random_seed`).
+- `spaces.py` (no Django imports, like `modeling.features`): `expand()`
+  (grid product + dedup + cap/sample), `validate()` (registry key exists +
+  available + task matches + `coerce_params` each value), `params_hash()`,
+  `scalar_score()`, `valid_scores()`.
+- `search.py::run_search(search)` - never raises (mirrors `modeling.training`):
+  builds the dataset **once**, then per candidate fits on the train slice,
+  times `fit` and holdout `predict`, records `model_size_bytes`
+  (`len(pickle.dumps(estimator))`), scores the holdout via `modeling.metrics`.
+  Ranks OK candidates by the chosen metric; flags the Pareto front (not
+  dominated on score up / fit time down / predict latency down / size down).
+  A bad candidate -> a `failed` `ModelSearchResult`, loop continues; a
+  whole-run failure lands on `ModelSearchRun`. No per-candidate artifacts.
+- `services.py` (deferred imports): `run_search`, `promote_result(result)` ->
+  a new `modeling.TradingModel` (estimator+params from the result, specs from
+  the search); `full_clean`'d, **not** auto-trained.
+- `models.py`: `ModelSearch`, `ModelSearchRun` (execution row),
+  `ModelSearchResult` (per candidate: params, score, full metrics blob,
+  `fit_seconds`/`predict_seconds`/`predict_latency_ms`/`model_size_bytes`,
+  `rank`, `is_pareto`, `status` ok/failed; `unique(run, params_hash)`).
+- `management/commands/run_model_search.py` (`<search_id> [--seed] [--max]`),
+  `tasks.py::run_model_search_task` (unscheduled).
+- UI (FBVs under `/model-search/`, extend `marketdata/base.html`, linked from
+  the shared nav's **Models** group): `index`, `edit` ("Load from base model"
+  prefill / `?from=<pk>`), `detail` (config, **Run search** synchronous,
+  ranked candidate table + accuracy-vs-fit-time SVG scatter + **Promote** per
+  row). Single trailing holdout, **not** walk-forward.
+
+Usage, search-space shape and limitations: `docs/MODEL_SEARCH.md`.
 
 ## `backtesting` app (Phase 7, walk-forward evaluation)
 
