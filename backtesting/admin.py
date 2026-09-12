@@ -29,8 +29,16 @@ class BacktestAdmin(admin.ModelAdmin):
 
 @admin.register(BacktestRun)
 class BacktestRunAdmin(admin.ModelAdmin):
-    list_display = ("backtest", "status", "started_at", "n_folds", "n_predictions", "n_trades")
-    list_filter = ("status", "backtest")
+    list_display = (
+        "backtest",
+        "status",
+        "started_at",
+        "n_folds",
+        "n_predictions",
+        "n_trades",
+        "looks_leaky",
+    )
+    list_filter = ("status", "looks_leaky", "backtest")
     readonly_fields = tuple(f.name for f in BacktestRun._meta.fields)
 
 

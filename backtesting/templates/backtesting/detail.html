@@ -43,7 +43,7 @@ costs        = {{ backtest.commission_bps }} bps commission + {{ backtest.slippa
     <div class="metric-cards">
       <div class="card"><div class="k">MAE</div><div class="v">{{ acc.mae|floatformat:3|default:"&mdash;" }}</div></div>
       <div class="card"><div class="k">Dir. acc</div><div class="v">{{ acc.directional_accuracy|floatformat:3|default:"&mdash;" }}</div></div>
-      <div class="card"><div class="k">Skill vs naive</div><div class="v">{% skill_badge acc.skill_vs_naive %}</div></div>
+      <div class="card"><div class="k">Skill vs naive</div><div class="v">{% skill_badge acc.skill_vs_naive latest.looks_leaky %}</div></div>
       <div class="card"><div class="k">Accuracy</div><div class="v">{{ acc.accuracy|floatformat:3|default:"&mdash;" }}</div></div>
       <div class="card"><div class="k">Total return</div><div class="v">{{ tr.total_return|floatformat:3|default:"&mdash;" }}</div></div>
       <div class="card"><div class="k">CAGR</div><div class="v">{{ tr.cagr|floatformat:3|default:"&mdash;" }}</div></div>

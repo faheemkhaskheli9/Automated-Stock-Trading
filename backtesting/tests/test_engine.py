@@ -1,6 +1,6 @@
 import pytest
 
-from backtesting.engine import run_backtest
+from backtesting.engine import looks_leaky, run_backtest
 from backtesting.models import (
     BacktestFold,
     BacktestPrediction,
@@ -41,6 +41,32 @@ def test_walk_forward_runs_and_persists(inst):
     assert "mae" in acc and "skill_vs_naive" in acc
     trading = run.metrics["trading"]
     assert "cagr" in trading and "max_drawdown" in trading
+    # run.looks_leaky is wired from the same accuracy dict (see TestLooksLeaky
+    # below for the heuristic itself) - this fixture's deterministic sinusoid
+    # is trivially near-perfectly fittable by ridge, so it legitimately trips
+    # the canary rather than proving a false positive.
+    assert run.looks_leaky is True
+
+
+class TestLooksLeaky:
+    """Unit tests for the pure heuristic - mirrors
+    forecasting.backtesting.engine.looks_leaky's thresholds."""
+
+    def test_near_zero_mae_is_leaky(self):
+        assert looks_leaky({"mae": 1e-9, "skill_vs_naive": 0.1, "r2": 0.5}) is True
+
+    def test_high_skill_is_leaky(self):
+        assert looks_leaky({"mae": 1.0, "skill_vs_naive": 0.99, "r2": 0.5}) is True
+
+    def test_near_perfect_r2_is_leaky(self):
+        assert looks_leaky({"mae": 1.0, "skill_vs_naive": 0.1, "r2": 0.9995}) is True
+
+    def test_ordinary_result_is_not_leaky(self):
+        assert looks_leaky({"mae": 1.2, "skill_vs_naive": 0.15, "r2": 0.4}) is False
+
+    def test_missing_keys_do_not_raise(self):
+        # A classification run's `accuracy` dict has none of these keys.
+        assert looks_leaky({"accuracy": 0.8, "f1": 0.7}) is False
 
 
 def test_naive_baseline_is_beatable_reference(inst):

@@ -80,7 +80,11 @@ def detail(request, pk):
     if request.method == "POST" and request.POST.get("action") == "run":
         run = run_backtest(backtest, created_by=request.user)
         if run.status == run.Status.SUCCESS:
-            messages.success(request, f"Ran {run.n_folds} folds, {run.n_predictions} predictions.")
+            note = f"Ran {run.n_folds} folds, {run.n_predictions} predictions."
+            if run.looks_leaky:
+                messages.warning(request, note + " Result looks leaky - investigate.")
+            else:
+                messages.success(request, note)
         else:
             messages.error(request, f"Backtest failed: {run.error}")
         return redirect("backtesting:detail", pk=backtest.pk)

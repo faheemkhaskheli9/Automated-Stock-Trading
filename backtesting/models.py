@@ -179,6 +179,9 @@ class BacktestRun(models.Model):
     equity_curve = models.JSONField(
         default=list, blank=True, help_text="[[iso_date, equity], ...] for the pooled portfolio."
     )
+    looks_leaky = models.BooleanField(
+        default=False, help_text="engine.looks_leaky verdict - implausible pooled OOS skill."
+    )
     error = models.TextField(blank=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True

@@ -99,6 +99,15 @@ Celery (unscheduled): `backtesting.tasks.run_backtest_task(backtest_id)`,
   availability + disjointness), `test_engine.py` (`naive` skill-vs-naive ~= 0)
   and `test_frozen.py` (one pseudo-fold, cutoff enforced, walk-forward still
   the default) are the canaries.
+- `engine.looks_leaky(accuracy)` - the same heuristic as
+  `forecasting.backtesting.engine.looks_leaky` (near-zero MAE, implausibly
+  high `skill_vs_naive`, or `r2` above ceiling) - flags a regression run's
+  pooled OOS accuracy as implausible; the run's `looks_leaky` field is set on
+  every `_execute()` and the detail page's skill badge (`{% skill_badge %}`)
+  renders it as an amber "investigate for leakage" pill instead of green.
+  Classification runs (whose `accuracy` dict has none of these keys) are
+  never flagged. It's a heuristic, not a proof - a genuinely highly
+  predictable synthetic series can trip it without any real leak.
 
 ## v1 limitations
 

@@ -102,6 +102,25 @@ class _PredictionSink:
         self.pooled_anchor: list[float] = []
 
 
+def looks_leaky(accuracy: dict, *, skill_ceiling: float = 0.98) -> bool:
+    """Heuristic leak canary (mirrors ``forecasting.backtesting.engine.looks_leaky``):
+    an out-of-sample forecast should not near-perfectly reproduce the future.
+    Only meaningful for the regression ``accuracy`` dict produced by
+    ``modeling.metrics.regression_metrics`` (``skill_vs_naive``/``mae``/``r2``);
+    a classification run's ``accuracy`` dict has none of these keys, so this
+    always returns ``False`` for it."""
+    skill = accuracy.get("skill_vs_naive")
+    mae = accuracy.get("mae")
+    r2 = accuracy.get("r2")
+    if mae is not None and mae < 1e-6:
+        return True
+    if skill is not None and skill > skill_ceiling:
+        return True
+    if r2 is not None and r2 > 0.999:
+        return True
+    return False
+
+
 def _positions_and_metrics(bt, target_type, is_clf, raw, t_true, t_anchor, proba_up):
     positions = trade_mod.positions_from_forecast(
         target_type,
@@ -526,6 +545,7 @@ def _execute(bt, run) -> None:
         run.n_folds = used_folds
         run.n_predictions = len(pred_rows)
         run.n_trades = len(trade_rows)
+        run.looks_leaky = looks_leaky(accuracy)
         run.metrics = {
             "accuracy": accuracy,
             "trading": trading,

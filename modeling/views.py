@@ -3,7 +3,7 @@ import logging
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.paginator import Paginator
+from django.core.paginator import Page, Paginator
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
@@ -67,9 +67,15 @@ def detail(request, pk):
 
     prediction_qs = model.predictions.select_related("instrument")
     predictions = list(prediction_qs[:PREDICTION_CHART_ROWS])
-    prediction_page = Paginator(prediction_qs, PREDICTION_PAGE_SIZE).get_page(
-        request.GET.get("page")
-    )
+    paginator = Paginator(prediction_qs, PREDICTION_PAGE_SIZE)
+    page_param = request.GET.get("page")
+    if page_param in (None, "", "1"):
+        # Page 1's rows are already the head of `predictions` (same
+        # ordering) - build the Page from that instead of re-querying the
+        # same rows via paginator.get_page().
+        prediction_page = Page(predictions[:PREDICTION_PAGE_SIZE], 1, paginator)
+    else:
+        prediction_page = paginator.get_page(page_param)
     if request.GET.get("export") == "csv":
         response = HttpResponse(content_type="text/csv")
         response["Content-Disposition"] = f'attachment; filename="model-{model.pk}-predictions.csv"'
