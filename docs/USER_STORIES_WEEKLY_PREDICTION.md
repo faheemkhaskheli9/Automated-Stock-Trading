@@ -52,9 +52,8 @@ don't have to remember to check a dashboard.
   the UI but not pushed as noise.
 - Status: done - `signalfeed.services.send_weekly_signals` +
   `delivery.deliver` (email/webhook/Telegram), `gate.evaluate_gate` for the
-  suppression, `/signals/` action bar + `send_weekly_signals` command/task
-  (task unscheduled - needs a cloud scheduler entry, see
-  `AutomaticStockTrading/schedules.py`).
+  suppression, `/signals/` action bar + `send_weekly_signals` command/task,
+  scheduled Mon 08:30 PKT via `AutomaticStockTrading/schedules.py`.
 
 **US-5 - Only notify when the model has proven itself**
 As an operator, I want to be notified only for stocks whose model has a
@@ -126,8 +125,8 @@ time and decide whether to keep trusting a given model.
 - Acceptance: a post-close job grades the week's signals and pushes a
   recap message (hit rate, count) through the same notification channels.
 - Status: done - `signalfeed.services.recap_weekly_signals` +
-  `recap_weekly_signals` command/task (task unscheduled - needs a cloud
-  scheduler entry).
+  `recap_weekly_signals` command/task, scheduled Fri 17:00 PKT via
+  `AutomaticStockTrading/schedules.py`.
 - Also surfaced continuously: `/signals/` shows trailing hit-rate, and the
   dashboard landing page shows a signal hit-rate KPI tile.
 
@@ -142,12 +141,12 @@ before it damages the notification feed's credibility.
 
 ## Gaps / follow-ups (not yet done)
 
-- **US-12 - Scheduled, not just synchronous.** `send_weekly_signals_task`,
-  `recap_weekly_signals_task`, and `train_weekly_models_task` exist but
-  aren't wired to a cloud scheduler yet (`AutomaticStockTrading/schedules.py`
-  only covers the daily chain + the three weekly triggers described in
-  CLAUDE.md - confirm these are actually deployed/enabled in the target
-  environment, since Phase 6/live-infra readiness is still open).
+- ~~**US-12 - Scheduled, not just synchronous.**~~ Verified done: all three
+  weekly jobs are already in `AutomaticStockTrading/schedules.py` (`train
+  Sun 06:00`, `send Mon 08:30`, `recap Fri 17:00`, all `Asia/Karachi`) and
+  materialise via `seed_periodic_tasks`, same as the daily chain. Original
+  note in this doc was wrong - closed on board #5 as a duplicate of already-
+  shipped work rather than implemented.
 - **US-13 - Model-search over the walk-forward metric.** `modelsearch`
   ranks candidates on a single trailing holdout; there's no automated sweep
   that selects a model by walk-forward (`backtesting` app) accuracy instead.
