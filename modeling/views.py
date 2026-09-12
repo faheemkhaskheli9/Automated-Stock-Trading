@@ -8,11 +8,12 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
-from . import services
+from . import services, symbol_selection
 from .forms import ModelConfigForm, PredictForm
 from .leaderboard import DEFAULT_WINDOW, WINDOW_CHOICES, build_leaderboard
 from .models import TradingModel
 from .registry import catalogue
+from .weekday_suite import build_weekday_suite, suite_estimator_keys
 
 logger = logging.getLogger(__name__)
 
@@ -186,5 +187,44 @@ def leaderboard(request):
             "board": build_leaderboard(window_days=window),
             "window": window,
             "windows": WINDOW_CHOICES,
+        },
+    )
+
+
+@login_required(login_url="marketdata:login")
+@require_http_methods(["GET", "POST"])
+def weekday_suite(request):
+    """Auto-pick a well-covered instrument and train one of each applicable
+    estimator on the Monday->Friday target, then compare their holdout
+    accuracy - the "one action" path behind ``train_weekday_models``."""
+    rankings = symbol_selection.score_instruments()
+    result = None
+    if request.method == "POST":
+        symbol = request.POST.get("symbol", "").strip()
+        instrument = None
+        if symbol:
+            instrument = next(
+                (s.instrument for s in rankings if s.instrument.symbol == symbol), None
+            )
+            if instrument is None:
+                messages.error(request, f"Unknown or unranked instrument {symbol!r}.")
+                return redirect("modeling:weekday_suite")
+        result = build_weekday_suite(instrument, created_by=request.user)
+        for err in result.errors:
+            messages.warning(request, err)
+        if result.models:
+            messages.success(
+                request,
+                f"Trained {len(result.models)} model(s) on {result.instrument.symbol}.",
+            )
+        rankings = symbol_selection.score_instruments()
+
+    return render(
+        request,
+        "modeling/weekday_suite.html",
+        {
+            "rankings": rankings,
+            "result": result,
+            "estimator_keys": suite_estimator_keys(),
         },
     )

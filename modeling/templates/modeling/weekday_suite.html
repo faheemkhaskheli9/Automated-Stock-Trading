@@ -1,0 +1,80 @@
+{% extends 'marketdata/base.html' %}
+{% block content %}
+<main>
+  <div class="intro">
+    <div>
+      <p class="eyebrow">MODELING</p>
+      <h1>Weekday suite</h1>
+      <p class="muted">
+        Train one of each applicable estimator ({{ estimator_keys|length }}: {{ estimator_keys|join:", " }})
+        on the Monday&rarr;Friday target for one instrument, then compare their holdout accuracy.
+      </p>
+    </div>
+    <div><a class="secondary" href="{% url 'modeling:index' %}">All models</a></div>
+  </div>
+  {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+
+  <div class="panel table-scroll">
+    <h2>Instrument ranking</h2>
+    <p class="muted">Ranked by weekly Monday/Friday pair coverage, liquidity and overall bar coverage. Not viable = too little paired history to fit on.</p>
+    <table>
+      <thead><tr><th>Symbol</th><th>Viable</th><th>Mon/Fri pairs</th><th>Coverage</th><th>Avg $ volume (180d)</th><th>Score</th><th>Reasons</th><th></th></tr></thead>
+      <tbody>
+      {% for s in rankings %}
+        <tr>
+          <td>{{ s.instrument.symbol }}</td>
+          <td>{% if s.viable %}yes{% else %}no{% endif %}</td>
+          <td>{{ s.weekday_pairs }}</td>
+          <td>{{ s.coverage|floatformat:2 }}</td>
+          <td>{{ s.avg_dollar_volume|floatformat:0 }}</td>
+          <td>{{ s.score|floatformat:3 }}</td>
+          <td>{{ s.reasons|join:"; " }}</td>
+          <td>
+            <form method="post">
+              {% csrf_token %}
+              <input type="hidden" name="symbol" value="{{ s.instrument.symbol }}">
+              <button type="submit" class="secondary" {% if not s.viable %}disabled{% endif %}>Train suite</button>
+            </form>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="8" class="empty">No active instruments with price history yet.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <form method="post">
+      {% csrf_token %}
+      <button type="submit" class="primary">Auto-pick best symbol &amp; train suite</button>
+    </form>
+  </div>
+
+  {% if result %}
+  <div class="panel table-scroll">
+    <h2>Results: {{ result.instrument.symbol }}</h2>
+    <table>
+      <thead><tr><th>#</th><th>Estimator</th><th>Status</th><th>N</th><th>MAE</th><th>RMSE</th><th>Directional acc.</th><th>Skill vs naive</th><th></th></tr></thead>
+      <tbody>
+      {% for row in result.evaluation %}
+        <tr>
+          <td>{{ row.rank }}</td>
+          <td>{{ row.estimator }}</td>
+          <td>{{ row.status }}</td>
+          <td>{{ row.n|default:"&mdash;" }}</td>
+          <td>{% if row.mae is not None %}{{ row.mae|floatformat:4 }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if row.rmse is not None %}{{ row.rmse|floatformat:4 }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if row.directional_accuracy is not None %}{{ row.directional_accuracy|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+          <td>{% if row.skill_vs_naive is not None %}{{ row.skill_vs_naive|floatformat:3 }}{% else %}&mdash;{% endif %}</td>
+          <td><a href="{% url 'modeling:detail' row.model.pk %}">View</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="9" class="empty">No models were trained.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</main>
+{% endblock %}

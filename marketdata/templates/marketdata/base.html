@@ -17,6 +17,7 @@
 <div class="navgroup"><button type="button" class="navgroup-btn" aria-haspopup="true" aria-expanded="false"{% if app == 'modeling' or app == 'modelsearch' or app == 'backtesting' or app == 'forecasting' %} aria-current="true"{% endif %}>Models</button><div class="navgroup-menu">
 <a href="{% url 'modeling:index' %}"{% if app == 'modeling' and url != 'leaderboard' %} aria-current="page"{% endif %}>Modeling</a>
 <a href="{% url 'modeling:leaderboard' %}"{% if app == 'modeling' and url == 'leaderboard' %} aria-current="page"{% endif %}>Leaderboard</a>
+<a href="{% url 'modeling:weekday_suite' %}"{% if app == 'modeling' and url == 'weekday_suite' %} aria-current="page"{% endif %}>Weekday Suite</a>
 <a href="{% url 'modelsearch:index' %}"{% if app == 'modelsearch' %} aria-current="page"{% endif %}>Model Search</a>
 <a href="{% url 'backtesting:index' %}"{% if app == 'backtesting' %} aria-current="page"{% endif %}>Model Backtests</a>
 <a href="{% url 'forecasting:index' %}"{% if app == 'forecasting' %} aria-current="page"{% endif %}>Forecast Backtests</a>

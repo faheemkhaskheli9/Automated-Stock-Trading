@@ -29,7 +29,12 @@ def test_login_required(client):
 
 def test_pages_render(client, user, inst):
     client.force_login(user)
-    for name in ("modeling:index", "modeling:create", "modeling:estimators"):
+    for name in (
+        "modeling:index",
+        "modeling:create",
+        "modeling:estimators",
+        "modeling:weekday_suite",
+    ):
         assert client.get(reverse(name)).status_code == 200
 
 
@@ -162,5 +167,36 @@ def test_create_rejects_task_mismatch(client, user, inst):
             "holdout_fraction": "0.2",
         },
     )
+    assert resp.status_code == 200
+    assert TradingModel.objects.count() == 0
+
+
+def test_weekday_suite_get_shows_ranking(client, user, inst):
+    client.force_login(user)
+    resp = client.get(reverse("modeling:weekday_suite"))
+    assert resp.status_code == 200
+    assert resp.context["rankings"][0].instrument == inst
+    assert resp.context["result"] is None
+
+
+def test_weekday_suite_post_auto_picks_and_trains(client, user, inst):
+    client.force_login(user)
+    resp = client.post(reverse("modeling:weekday_suite"), data={})
+    assert resp.status_code == 200
+    result = resp.context["result"]
+    assert result.instrument == inst
+    assert len(result.models) == len(resp.context["estimator_keys"])
+    assert TradingModel.objects.filter(name__startswith="Weekday ENGRO").exists()
+
+
+def test_weekday_suite_post_with_explicit_symbol(client, user, inst):
+    client.force_login(user)
+    resp = client.post(reverse("modeling:weekday_suite"), data={"symbol": "ENGRO"})
+    assert resp.context["result"].instrument == inst
+
+
+def test_weekday_suite_post_unknown_symbol_redirects_with_error(client, user, inst):
+    client.force_login(user)
+    resp = client.post(reverse("modeling:weekday_suite"), data={"symbol": "NOPE"}, follow=True)
     assert resp.status_code == 200
     assert TradingModel.objects.count() == 0
