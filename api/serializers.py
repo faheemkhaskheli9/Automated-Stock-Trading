@@ -225,6 +225,7 @@ class ModelPredictionSerializer(serializers.ModelSerializer):
             "predicted_json",
             "actual_value",
             "abs_error",
+            "explanation",
             "created_at",
         ]
         read_only_fields = fields

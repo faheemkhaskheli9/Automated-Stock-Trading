@@ -22,6 +22,7 @@ from marketdata.models import PriceBar
 
 from . import targets as target_mod
 from .dataset import build_dataset
+from .explain import explain_prediction
 from .models import ModelPrediction
 
 logger = logging.getLogger(__name__)
@@ -82,6 +83,12 @@ def predict(model, instrument, as_of, *, target_date: date | None = None, persis
     as_of_dt = dataset.X.index[0].to_pydatetime()
     feature_hash = _feature_hash(payload["feature_names"], X.iloc[0].tolist())
 
+    try:
+        explanation = explain_prediction(pipeline, payload["feature_names"], X)
+    except Exception:  # noqa: BLE001 - a prediction must not fail on its own explanation
+        logger.exception("explain_prediction failed for model %s / %s", model.pk, instrument.symbol)
+        explanation = None
+
     if not persist:
         return ModelPrediction(
             model=model,
@@ -91,6 +98,7 @@ def predict(model, instrument, as_of, *, target_date: date | None = None, persis
             predicted_value=predicted_value,
             predicted_json=predicted_json,
             feature_hash=feature_hash,
+            explanation=explanation,
         )
 
     obj, _ = ModelPrediction.objects.update_or_create(
@@ -102,6 +110,7 @@ def predict(model, instrument, as_of, *, target_date: date | None = None, persis
             "predicted_value": predicted_value,
             "predicted_json": predicted_json,
             "feature_hash": feature_hash,
+            "explanation": explanation,
             "actual_value": None,
             "abs_error": None,
         },

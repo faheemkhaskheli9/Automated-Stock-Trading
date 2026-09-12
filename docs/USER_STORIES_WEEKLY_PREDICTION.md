@@ -66,6 +66,26 @@ spammed with near-coin-flip calls.
   out-of-sample numbers from `modeling.leaderboard` and falling back to
   last-training holdout metrics.
 
+**US-6b - Reason for the predicted change**
+As an operator, I want each weekly call to tell me *why* the model expects
+the move - not just the direction and % - so I can judge whether the call is
+trustworthy before I act on it (or ignore it) instead of treating the model
+as an unexplained black box.
+- Acceptance: every delivered signal's message includes a "Why:" line naming
+  the top contributing features (with their values and pull direction) when
+  the underlying estimator supports attribution, or says explicitly that no
+  attribution is available for that estimator - never silence, never a
+  fabricated reason.
+- Status: done (2026-09-12) - `modeling/explain.py::explain_prediction`
+  (linear coefficients x scaled feature value, or tree feature importances;
+  `None` for MLP/ensembles/multi-output/baselines) computed once per
+  `modeling.ModelPrediction` in `modeling/prediction.py::predict`, carried
+  onto `signalfeed.WeeklySignal.explanation`, and rendered by
+  `services._format_signal` / `WeeklySignal.reason_text()` (used in both the
+  push message and the `/signals/` cards). Not yet extended to
+  `execution.notifications` (order fills/rejections) or a future LLM-driven
+  signal source.
+
 **US-6 (optional/advisory) - Suggested position size**
 As an operator, I want an advisory position-size suggestion (not an order)
 alongside a deliverable UP/DOWN call, so I have a starting point for sizing

@@ -142,6 +142,12 @@ class ModelPrediction(models.Model):
     actual_value = models.FloatField(null=True, blank=True)
     abs_error = models.FloatField(null=True, blank=True)
     feature_hash = models.CharField(max_length=64, blank=True)
+    explanation = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Best-effort feature attribution for this prediction (modeling.explain); "
+        "null when the estimator exposes no usable attribution.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

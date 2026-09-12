@@ -355,7 +355,14 @@ actual-value backfill.
   time-ordered holdout (single split - **not** walk-forward); a row is kept
   only if its label was observable by `train_end`.
 - `training.py` (`train_model`) never raises - records a `ModelTrainingRun`.
-  `prediction.py` (`predict`, `backfill_actuals`). `services.py` is the thin
+  `prediction.py` (`predict`, `backfill_actuals`). `explain.py`
+  (`explain_prediction`) computes a best-effort "why" for one prediction -
+  linear coefficients or tree `feature_importances_` over the row actually
+  scored, `None` for estimators with neither (MLP/voting ensembles/
+  multistep) - stored on `ModelPrediction.explanation` and exposed via the
+  API; `signalfeed` copies it onto `WeeklySignal` so every weekly push
+  states its reason, not just direction/magnitude (see
+  `docs/USER_STORIES_WEEKLY_PREDICTION.md` US-6b). `services.py` is the thin
   wrapper used by views/commands/tasks.
 - Commands: `train_model`, `predict_model`, `backfill_actuals`. Tasks
   (`tasks.py`, unscheduled): `train_model_task`, `run_model_predictions`,
@@ -503,7 +510,9 @@ live trading stays a separate, gated phase). Routed at `/signals/`.
   `direction` and coerces blank sizing fields to their defaults),
   `WeeklySignal` (one call per Friday, kept even when suppressed/errored:
   `direction` UP/DOWN/FLAT, `expected_return_pct`, `predicted_close`,
-  `reference_close`, `model_stats` snapshot, `status`
+  `reference_close`, `model_stats` snapshot, `explanation` (copied from the
+  underlying `modeling.ModelPrediction.explanation`; `reason_text()` renders
+  it or "no attribution available for this model"), `status`
   pending/sent/suppressed/error, `suggested_fraction`/`suggested_notional`/
   `suggested_shares`/`sizing_basis` (advisory sizing hint, only for a
   deliverable UP/DOWN call whose watch item set `sizing_capital`), then
@@ -513,7 +522,8 @@ live trading stays a separate, gated phase). Routed at `/signals/`.
   `edge = max(0, 2*directional_accuracy - 1)`, `fraction = min(kelly_fraction *
   edge, max_position_pct/100)`, `shares = floor(capital*fraction/reference_close)`.
   Magnitude is intentionally not a divisor. `generate_weekly_signals` calls it
-  for PENDING UP/DOWN signals; `_format_signal` prints a "Suggested size" line.
+  for PENDING UP/DOWN signals; `_format_signal` prints a "Suggested size" line
+  and always a "Why:" line (`modeling.explain.explanation_text`).
 - `gate.py` `evaluate_gate(item)` -> `GateResult`: prefers live
   out-of-sample numbers from `modeling.leaderboard.build_leaderboard`, falls
   back to the model's last-training `metrics["holdout"]`; suppresses (with a

@@ -52,6 +52,7 @@
           {% if s.suppression_reason %}&mdash; {{ s.suppression_reason }}{% endif %}
         </div>
         <div class="sig-meta">{{ s.trading_model.name }}</div>
+        <div class="sig-meta">Why: {{ s.reason_text }}</div>
       </div>
     {% empty %}
       <p class="empty">No signals generated yet. <a href="{% url 'signalfeed:watchlist' %}">Add watch items</a>, then use <b>Generate &amp; send</b> above.</p>

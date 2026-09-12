@@ -102,6 +102,26 @@ def test_format_signal_includes_size_line(watch):
     assert "Suggested size" in message
 
 
+def test_generate_carries_explanation_from_prediction(watch):
+    services.generate_weekly_signals(MON)
+    sig = WeeklySignal.objects.get()
+    assert sig.model_prediction.explanation is not None
+    assert sig.explanation == sig.model_prediction.explanation
+    assert sig.reason_text() != "no attribution available for this model"
+
+
+def test_format_signal_always_includes_a_why_line(watch):
+    services.generate_weekly_signals(MON)
+    sig = WeeklySignal.objects.get()
+    _, message = services._format_signal(sig)
+    assert "Why:" in message
+
+    sig.explanation = None
+    sig.save(update_fields=["explanation"])
+    _, message = services._format_signal(sig)
+    assert "Why: no attribution available for this model" in message
+
+
 def test_generate_is_idempotent_upsert(watch):
     services.generate_weekly_signals(MON)
     services.generate_weekly_signals(MON)

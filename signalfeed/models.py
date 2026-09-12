@@ -164,6 +164,12 @@ class WeeklySignal(models.Model):
         null=True, blank=True, help_text="Model's trailing directional accuracy at send time."
     )
     model_stats = models.JSONField(default=dict, blank=True)
+    explanation = models.JSONField(
+        null=True,
+        blank=True,
+        help_text="Best-effort feature attribution for this call, copied from the underlying "
+        "modeling.ModelPrediction (modeling.explain); null when unavailable for the estimator.",
+    )
 
     # Advisory position-sizing hint (only populated for a deliverable UP/DOWN
     # call whose watch item has sizing_capital > 0). No order is ever placed.
@@ -199,3 +205,11 @@ class WeeklySignal(models.Model):
 
     def __str__(self):
         return f"{self.instrument.symbol} {self.direction} -> {self.target_date}"
+
+    def reason_text(self) -> str:
+        """Human-readable "why" line for this call - see the project's
+        notification-reason requirement. Deferred import: ``modeling`` pulls
+        in scikit-learn."""
+        from modeling.explain import explanation_text
+
+        return explanation_text(self.explanation)

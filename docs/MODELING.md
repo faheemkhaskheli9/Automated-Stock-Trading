@@ -133,6 +133,17 @@ feature row, asserts the feature names still match, predicts, and upserts a
 `backfill_actuals` fills `actual_value` / `abs_error` once the target
 session's bar exists.
 
+`predict` also computes a best-effort **explanation** via
+`modeling/explain.py::explain_prediction` - the top contributing features for
+the single row just scored, using linear coefficients (weighted by the
+scaled feature value the pipeline actually saw) or tree
+`feature_importances_`; `None` for anything without either (MLP, voting
+ensembles, `MultiOutputRegressor`-wrapped multistep, baselines) rather than a
+fabricated reason. Stored on `ModelPrediction.explanation` and exposed via
+the read API; `signalfeed` copies it onto `WeeklySignal.explanation` so every
+weekly push / `/signals/` card carries a "Why:" line (see
+`docs/USER_STORIES_WEEKLY_PREDICTION.md` US-6b).
+
 ## Commands & tasks
 
 ```

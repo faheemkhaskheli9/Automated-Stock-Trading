@@ -130,6 +130,8 @@ def _size_hint(item, direction, stats, reference_close):
 
 
 def _format_signal(sig):
+    from modeling.explain import explanation_text
+
     arrow = {"up": "▲", "down": "▼", "flat": "▬"}.get(sig.direction, "")
     sym = sig.instrument.symbol
     subject = f"PSX weekly signal: {sym} {sig.direction.upper()} for {sig.target_date:%a %d %b}"
@@ -158,6 +160,7 @@ def _format_signal(sig):
             extra += f", n={st['n']}"
         lines.append(f"Model hit-rate: {st['directional_accuracy']:.0%}{extra}")
     lines.append(f"Model: {sig.trading_model.name if sig.trading_model else '-'}")
+    lines.append(f"Why: {explanation_text(sig.explanation)}")
     lines.append("Advisory only - not an order. Weekly forecasts are uncertain.")
     return subject, "\n".join(lines)
 
@@ -261,6 +264,7 @@ def generate_weekly_signals(as_of: date | None = None) -> list[SignalOutcome]:
                 "expected_return_pct": expected_return_pct,
                 "status": status,
                 "suppression_reason": "" if gate.passed else gate.reason[:255],
+                "explanation": pred.explanation,
             }
             if status == WeeklySignal.Status.PENDING:
                 size = _size_hint(item, direction, gate.stats, reference_close)
