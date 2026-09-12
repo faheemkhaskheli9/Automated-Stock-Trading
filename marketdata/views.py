@@ -20,6 +20,33 @@ from .services import sync_instrument_history
 logger = logging.getLogger(__name__)
 
 
+def _dashboard_kpis():
+    """Top active-model skill scores + the weekly signal feed's trailing
+    hit-rate, for the dashboard's "is anything working" KPI row.
+
+    Deferred imports (``modeling``/``signalfeed`` are heavier, higher-level
+    apps than ``marketdata``, same pattern as ``_forecast_panel`` above).
+    Each source degrades independently - a failure here must never break the
+    landing page."""
+    top_models = []
+    try:
+        from modeling.leaderboard import build_leaderboard
+
+        top_models = build_leaderboard().ranked[:3]
+    except Exception:  # noqa: BLE001 - a KPI must never break the dashboard
+        logger.exception("dashboard: leaderboard KPI failed")
+
+    signal_stats = None
+    try:
+        from signalfeed.services import trailing_hit_rate
+
+        signal_stats = trailing_hit_rate()
+    except Exception:  # noqa: BLE001
+        logger.exception("dashboard: signal hit-rate KPI failed")
+
+    return {"top_models": top_models, "signal_stats": signal_stats}
+
+
 @login_required(login_url="marketdata:login")
 @require_GET
 def dashboard(request):
@@ -91,6 +118,7 @@ def dashboard(request):
             "chart_bars": chart_bars,
             "query": query.urlencode(),
             "total_bars": PriceBar.objects.filter(instrument__exchange="PSX").count(),
+            **_dashboard_kpis(),
         },
     )
 

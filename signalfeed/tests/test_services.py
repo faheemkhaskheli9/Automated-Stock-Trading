@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from unittest import mock
 
 import pytest
@@ -230,3 +230,58 @@ def test_train_weekly_models_retrains_watchlist(watch):
     assert runs[0].status == runs[0].Status.SUCCESS
     model.refresh_from_db()
     assert model.trained_at >= old
+
+
+def _signal(inst, *, target_date, status, was_correct=None):
+    return WeeklySignal.objects.create(
+        instrument=inst,
+        as_of=target_date - timedelta(days=4),
+        target_date=target_date,
+        direction=WeeklySignal.Direction.UP,
+        status=status,
+        was_correct=was_correct,
+    )
+
+
+def test_trailing_hit_rate_counts_sent_graded_signals_in_window():
+    inst = make_instrument("ENGRO")
+    as_of = date(2026, 6, 1)
+    _signal(
+        inst,
+        target_date=as_of - timedelta(days=3),
+        status=WeeklySignal.Status.SENT,
+        was_correct=True,
+    )
+    _signal(
+        inst,
+        target_date=as_of - timedelta(days=10),
+        status=WeeklySignal.Status.SENT,
+        was_correct=False,
+    )
+    # excluded: ungraded, not SENT, or outside the window
+    _signal(
+        inst,
+        target_date=as_of - timedelta(days=5),
+        status=WeeklySignal.Status.SENT,
+        was_correct=None,
+    )
+    _signal(
+        inst,
+        target_date=as_of - timedelta(days=5),
+        status=WeeklySignal.Status.SUPPRESSED,
+        was_correct=True,
+    )
+    _signal(
+        inst,
+        target_date=as_of - timedelta(days=200),
+        status=WeeklySignal.Status.SENT,
+        was_correct=True,
+    )
+
+    stats = services.trailing_hit_rate(window_days=90, as_of=as_of)
+    assert stats == {"window_days": 90, "total": 2, "hits": 1, "rate": 0.5}
+
+
+def test_trailing_hit_rate_empty_window_reports_none_rate():
+    stats = services.trailing_hit_rate(window_days=90, as_of=date(2026, 6, 1))
+    assert stats == {"window_days": 90, "total": 0, "hits": 0, "rate": None}

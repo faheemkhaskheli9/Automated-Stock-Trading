@@ -21,6 +21,24 @@ GitHub Projects board #5 alongside Phase 7/8/9 work (per project convention).
   averaging several differently-biased models over any one of them. Tested,
   documented in `docs/MODELING.md`.
 
+## Done 2026-09-12 (session 2)
+
+- **UI: dashboard landing KPI tiles** (`marketdata/views.py::_dashboard_kpis`,
+  `marketdata/templates/marketdata/dashboard.html`): a `.stats` row at the
+  top of `marketdata:dashboard` showing the top active model's skill score
+  (+ next 2 by name), and the signal feed's trailing hit-rate, each linking
+  out to its full page. Both sources are read via deferred imports
+  (`modeling.leaderboard.build_leaderboard`, a new
+  `signalfeed.services.trailing_hit_rate` helper factored out of
+  `signalfeed.views.index` so both pages share one query) and degrade
+  independently on failure - a KPI must never break the landing page. Fixed
+  a pre-existing display bug found along the way: `signalfeed/index.html`
+  rendered the fractional `hit_rate` directly with a `%` suffix (e.g. 0.625
+  showed as "1%"); now uses `{% widthratio %}` to convert to a percentage,
+  same as the new dashboard tile. Tested (`marketdata/tests/test_dashboard.py
+  ::DashboardKpiTests`, new `signalfeed/tests/test_services.py` cases for
+  `trailing_hit_rate`).
+
 ## Models — next candidates (ranked)
 
 1. **Wire `voting_ensemble` into `modelsearch`'s default search spaces** so
@@ -61,14 +79,7 @@ GitHub Projects board #5 alongside Phase 7/8/9 work (per project convention).
 ## UI — next candidates (ranked; no specific complaint was raised, so this
 is a proposed punch list, not a confirmed backlog)
 
-1. **Dashboard landing KPIs**: `marketdata:dashboard` shows a market
-   overview; consider surfacing the modeling leaderboard's top-3 skill
-   scores and the signalfeed's trailing hit-rate as `.kpi`/`.stat-grid`
-   tiles on the landing page, so an operator sees "is anything working"
-   without navigating to `/modeling/leaderboard/` and `/signals/`
-   separately. Purely additive, reuses existing component classes and
-   already-computed data (`modeling.leaderboard.build_leaderboard`,
-   `signalfeed` recap stats) — no new page, no new query pattern.
+1. ~~Dashboard landing KPIs~~ — done 2026-09-12, see above.
 2. **Cross-links**: `instrument_detail` already shows a live-forecast panel;
    it does not currently link out to that instrument's `WatchItem` (if any)
    or its `Backtest` history. Adding those links costs a template change,
@@ -143,8 +154,8 @@ scalability gaps are architectural, not query-level:
 
 ## Suggested order for future sessions
 
-Highest ratio of value to risk, in order: (1) UI KPI tiles (#1 above, purely
-additive), (2) async-ify one heavy action end-to-end as a template for the
+Highest ratio of value to risk, in order: (1) ~~UI KPI tiles~~ done
+2026-09-12, (2) async-ify one heavy action end-to-end as a template for the
 rest (`modelsearch` **Run search** is the best pilot — smallest blast
 radius), (3) stacking ensemble, (4) actually build/run Docker once, (5)
 everything else, gated on real usage data rather than speculation.

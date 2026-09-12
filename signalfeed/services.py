@@ -341,6 +341,31 @@ def send_weekly_signals(
 # --------------------------------------------------------------------------
 # recap / accuracy tracking
 # --------------------------------------------------------------------------
+def trailing_hit_rate(*, window_days: int = 90, as_of: date | None = None) -> dict:
+    """Trailing hit-rate over SENT, graded signals in the last ``window_days``.
+
+    One query shape shared by the signalfeed index page and the marketdata
+    dashboard's KPI tiles, so "is the feed working" is answered the same way
+    in both places.
+    """
+    from .models import WeeklySignal
+
+    as_of = as_of or timezone.localdate()
+    graded = WeeklySignal.objects.filter(
+        was_correct__isnull=False,
+        status=WeeklySignal.Status.SENT,
+        target_date__gte=as_of - timedelta(days=window_days),
+    )
+    total = graded.count()
+    hits = graded.filter(was_correct=True).count()
+    return {
+        "window_days": window_days,
+        "total": total,
+        "hits": hits,
+        "rate": (hits / total) if total else None,
+    }
+
+
 def recap_weekly_signals(
     as_of: date | None = None,
     *,

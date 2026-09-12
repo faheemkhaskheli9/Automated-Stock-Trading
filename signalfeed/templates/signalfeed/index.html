@@ -14,7 +14,7 @@
   <div class="panel">
     <div class="kpi">
       <span><b>{{ watch_count }}</b>active watch items</span>
-      <span><b>{% if hit_rate is not None %}{{ hit_rate|floatformat:0 }}%{% else %}&mdash;{% endif %}</b>hit-rate ({{ window_days }}d, n={{ hit_total }})</span>
+      <span><b>{% if hit_rate is not None %}{% widthratio hit_rate 1 100 %}%{% else %}&mdash;{% endif %}</b>hit-rate ({{ window_days }}d, n={{ hit_total }})</span>
       <span><b>{% if latest_target %}{{ latest_target|date:"D d M" }}{% else %}&mdash;{% endif %}</b>latest target</span>
     </div>
   </div>

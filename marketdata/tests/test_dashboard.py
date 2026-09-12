@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -76,3 +77,79 @@ class DashboardTests(TestCase):
         response = self.client.post(reverse("marketdata:sync"), {"symbol": "../bad"})
         self.assertRedirects(response, "/")
         self.assertEqual(Instrument.objects.count(), 1)
+
+
+class DashboardKpiTests(TestCase):
+    """The landing-page "is anything working" KPI row (top model skill,
+    signal feed hit-rate) - each source must degrade independently."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_superuser("viewer", password="test-pass")
+        self.client.force_login(self.user)
+
+    def _row(self, name, *, skill, accuracy):
+        return SimpleNamespace(
+            model=SimpleNamespace(pk=1, name=name), skill=skill, directional_accuracy=accuracy
+        )
+
+    def test_kpi_tiles_render_with_data(self):
+        rows = [
+            self._row("Ridge ENGRO", skill=0.42, accuracy=0.61),
+            self._row("HGB HBL", skill=0.10, accuracy=0.55),
+        ]
+        with (
+            patch(
+                "modeling.leaderboard.build_leaderboard",
+                return_value=SimpleNamespace(ranked=rows),
+            ),
+            patch(
+                "signalfeed.services.trailing_hit_rate",
+                return_value={"window_days": 90, "total": 8, "hits": 5, "rate": 0.625},
+            ),
+        ):
+            response = self.client.get("/")
+        self.assertContains(response, "TOP MODEL SKILL")
+        self.assertContains(response, "Ridge ENGRO")
+        self.assertContains(response, "HGB HBL")
+        self.assertContains(response, "SIGNAL HIT RATE")
+        self.assertContains(response, "62")  # widthratio of 0.625 -> 62%
+
+    def test_kpi_tiles_empty_state_does_not_crash(self):
+        with (
+            patch(
+                "modeling.leaderboard.build_leaderboard",
+                return_value=SimpleNamespace(ranked=[]),
+            ),
+            patch(
+                "signalfeed.services.trailing_hit_rate",
+                return_value={"window_days": 90, "total": 0, "hits": 0, "rate": None},
+            ),
+        ):
+            response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No scored active models yet")
+        self.assertContains(response, "No graded signals yet")
+
+    def test_kpi_tiles_survive_leaderboard_failure(self):
+        with (
+            patch("modeling.leaderboard.build_leaderboard", side_effect=RuntimeError("boom")),
+            patch(
+                "signalfeed.services.trailing_hit_rate",
+                return_value={"window_days": 90, "total": 0, "hits": 0, "rate": None},
+            ),
+        ):
+            response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No scored active models yet")
+
+    def test_kpi_tiles_survive_signal_feed_failure(self):
+        with (
+            patch(
+                "modeling.leaderboard.build_leaderboard",
+                return_value=SimpleNamespace(ranked=[]),
+            ),
+            patch("signalfeed.services.trailing_hit_rate", side_effect=RuntimeError("boom")),
+        ):
+            response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "No graded signals yet")

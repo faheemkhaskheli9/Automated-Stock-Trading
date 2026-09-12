@@ -1,5 +1,5 @@
 import logging
-from datetime import date, timedelta
+from datetime import date
 
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
@@ -46,13 +46,7 @@ def index(request):
     current = list(qs.filter(target_date=latest_target)) if latest_target else []
     recent = Paginator(qs, RECENT_PAGE_SIZE).get_page(request.GET.get("page"))
 
-    graded = WeeklySignal.objects.filter(
-        was_correct__isnull=False,
-        status=WeeklySignal.Status.SENT,
-        target_date__gte=today - timedelta(days=ACCURACY_WINDOW_DAYS),
-    )
-    total = graded.count()
-    hits = graded.filter(was_correct=True).count()
+    stats = services.trailing_hit_rate(window_days=ACCURACY_WINDOW_DAYS, as_of=today)
 
     return render(
         request,
@@ -63,9 +57,9 @@ def index(request):
             "recent": recent,
             "watch_count": WatchItem.objects.filter(is_active=True).count(),
             "window_days": ACCURACY_WINDOW_DAYS,
-            "hit_total": total,
-            "hit_count": hits,
-            "hit_rate": (hits / total) if total else None,
+            "hit_total": stats["total"],
+            "hit_count": stats["hits"],
+            "hit_rate": stats["rate"],
         },
     )
 
