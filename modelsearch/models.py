@@ -20,6 +20,14 @@ class ModelSearch(models.Model):
         GRID = "grid", "Grid (every combination)"
         RANDOM = "random", "Random sample"
 
+    class ScoringMode(models.TextChoices):
+        HOLDOUT = "holdout", "Trailing holdout"
+        WALK_FORWARD = "walk_forward", "Walk-forward (refit per fold)"
+
+    class WfScheme(models.TextChoices):
+        EXPANDING = "expanding", "Expanding window"
+        ROLLING = "rolling", "Rolling window"
+
     name = models.CharField(max_length=255)
     base_model = models.ForeignKey(
         TradingModel,
@@ -54,6 +62,32 @@ class ModelSearch(models.Model):
         max_length=32,
         blank=True,
         help_text="Metric key to rank by. Blank = the task default.",
+    )
+    scoring_mode = models.CharField(
+        max_length=12,
+        choices=ScoringMode.choices,
+        default=ScoringMode.HOLDOUT,
+        help_text=(
+            "Holdout: one trailing split, fast. Walk-forward: refit every candidate on each "
+            "backtesting.walkforward fold and pool the out-of-sample predictions - slower "
+            "(candidates x folds fits) but the accuracy read the single holdout can diverge from."
+        ),
+    )
+    wf_scheme = models.CharField(
+        max_length=12, choices=WfScheme.choices, default=WfScheme.EXPANDING
+    )
+    wf_train_span = models.PositiveIntegerField(
+        default=250, help_text="Walk-forward only. Sessions of training history per fold."
+    )
+    wf_test_span = models.PositiveIntegerField(
+        default=21, help_text="Walk-forward only. Sessions scored per fold before the next refit."
+    )
+    wf_step = models.PositiveIntegerField(
+        default=21, help_text="Walk-forward only. Sessions the window advances between folds."
+    )
+    wf_gap = models.PositiveIntegerField(
+        default=1,
+        help_text="Walk-forward only. Embargo sessions between a fold's train end and test start.",
     )
     best_result = models.ForeignKey(
         "ModelSearchResult",
@@ -104,6 +138,10 @@ class ModelSearch(models.Model):
             errors["holdout_fraction"] = "Must be between 0.05 and 0.5."
         if self.max_candidates < 1:
             errors["max_candidates"] = "Must be at least 1."
+
+        for field in ("wf_train_span", "wf_test_span", "wf_step"):
+            if getattr(self, field) < 1:
+                errors[field] = "Must be at least 1 session."
 
         if errors:
             raise ValidationError(errors)
@@ -172,6 +210,11 @@ class ModelSearchResult(models.Model):
         null=True, blank=True, help_text="Holdout predict wall time per row, milliseconds."
     )
     model_size_bytes = models.PositiveIntegerField(null=True, blank=True)
+    wf_folds = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text="Walk-forward mode only: folds pooled into this candidate's score/metrics.",
+    )
     rank = models.PositiveIntegerField(null=True, blank=True)
     is_pareto = models.BooleanField(
         default=False, help_text="Not dominated on (score, fit time, predict latency, size)."

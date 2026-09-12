@@ -50,6 +50,12 @@ def _save(form, instance=None):
     obj.max_candidates = data["max_candidates"]
     obj.random_seed = data["random_seed"]
     obj.scoring = data["scoring"] or ""
+    obj.scoring_mode = data["scoring_mode"]
+    obj.wf_scheme = data["wf_scheme"]
+    obj.wf_train_span = data["wf_train_span"]
+    obj.wf_test_span = data["wf_test_span"]
+    obj.wf_step = data["wf_step"]
+    obj.wf_gap = data["wf_gap"]
     obj.save()
     obj.instruments.set(data["instruments"])
     return obj
@@ -152,9 +158,11 @@ def detail(request, pk):
         results = list(latest_run.results.order_by(F("rank").asc(nulls_last=True), "-score"))
     task = search.task if search.target_spec else "regression"
     cols = _CLASSIFICATION_COLS if task == "classification" else _REGRESSION_COLS
+    show_holdout_col = search.scoring_mode == ModelSearch.ScoringMode.WALK_FORWARD
     for r in results:
         blob = r.metrics or {}
         r.display_metrics = [_fmt(blob.get(c)) for c in cols]
+        r.display_holdout_score = _fmt(blob.get("holdout_score"))
 
     return render(
         request,
@@ -167,5 +175,6 @@ def detail(request, pk):
             "metric_cols": cols,
             "scatter": _scatter([r for r in results if r.status == ModelSearchResult.Status.OK]),
             "score_key": search.score_key() if search.target_spec else "",
+            "show_holdout_col": show_holdout_col,
         },
     )

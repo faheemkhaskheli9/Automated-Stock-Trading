@@ -7,16 +7,18 @@ and retraining it over and over.
 A search is seeded from an existing `TradingModel`: it copies that model's
 feature spec, target spec, instruments and train window, then evaluates every
 candidate `(estimator, params)` combination on the **same single trailing
-holdout** the `modeling` studio uses. The dataset is built once and reused
-across all candidates. Results are ranked by a chosen accuracy metric, and fit
-time / per-row predict latency / serialized model size are recorded so the
-speed-vs-accuracy trade-off is visible. The winner is one click from being
-**promoted** into a new `TradingModel` for the normal `/modeling/` train ->
-predict flow.
+holdout** the `modeling` studio uses (`scoring_mode = "holdout"`, the
+default), or by refitting each candidate on every `backtesting.walkforward`
+fold and pooling the out-of-sample predictions (`scoring_mode =
+"walk_forward"`) - see "Scoring mode" below. The dataset is built once and
+reused across all candidates. Results are ranked by a chosen accuracy metric,
+and fit time / per-row predict latency / serialized model size are recorded
+so the speed-vs-accuracy trade-off is visible. The winner is one click from
+being **promoted** into a new `TradingModel` for the normal `/modeling/`
+train -> predict flow.
 
-**Not** walk-forward (that is the `backtesting` app) and **no** per-candidate
-artifacts are written - only the promoted winner is trained and dumped, by
-`modeling`.
+No per-candidate artifacts are written - only the promoted winner is trained
+and dumped, by `modeling`.
 
 Pages (all `login_required`, routed under `/model-search/`):
 
@@ -63,7 +65,30 @@ Expansion / validation lives in `modelsearch/spaces.py` (no Django imports, like
   `neg_mae`, `neg_rmse` (errors are negated so "higher is better" always holds).
 - classification: `accuracy` (default), `roc_auc`, `f1`, `precision`, `recall`.
 
-Every candidate also stores the full `modeling.metrics` holdout blob.
+Every candidate also stores the full `modeling.metrics` blob it was ranked on.
+
+## Scoring mode
+
+`ModelSearch.scoring_mode`:
+
+- `"holdout"` (default) - each candidate is fit once on the trailing-holdout
+  train slice and scored on the held-out slice, same as before. Fast, but a
+  single split can disagree with how a model actually holds up over time.
+- `"walk_forward"` - each candidate is refit on every
+  `backtesting.walkforward.generate_folds` fold (`wf_scheme`/`wf_train_span`/
+  `wf_test_span`/`wf_step`/`wf_gap`, same fields and defaults as
+  `backtesting.Backtest`) and the out-of-sample predictions are pooled across
+  folds into one metrics blob - that pooled score is what ranks candidates.
+  The single-holdout score/metrics for the same candidate are also computed
+  and kept under `metrics["holdout"]` / `metrics["holdout_score"]`, and
+  `ModelSearchResult.wf_folds` records how many folds were pooled - this is
+  exactly the holdout-vs-walk-forward divergence check this mode exists for,
+  shown side by side on `/model-search/<id>/`.
+  This is `candidates x folds` model fits, so it costs proportionally more
+  wall-clock than `"holdout"` - shrink `max_candidates` or widen
+  `wf_test_span`/`wf_step` if a run gets too slow. A dataset too short for one
+  fold fails the whole run (same as `backtesting`) rather than silently
+  falling back to holdout.
 
 ## Pareto front
 
@@ -93,9 +118,10 @@ It is **not** trained automatically - land on `/modeling/<new id>/` and press
 
 ## Limitations
 
-- Single trailing holdout, not walk-forward - a fast comparative read, not a
-  robust out-of-sample estimate. Confirm a promoted model with the `backtesting`
-  app.
+- Default `"holdout"` mode is a single trailing split - a fast comparative
+  read, not a robust out-of-sample estimate. `"walk_forward"` mode narrows
+  that gap for the search itself, but still runs on the search's own dataset
+  window; confirm a promoted model's live behavior with the `backtesting` app.
 - Timing numbers are wall-clock on the machine running the search; treat them as
   relative, not absolute SLAs.
 - Baseline estimators (`naive_last` / `drift` / `seasonal_naive`) need the

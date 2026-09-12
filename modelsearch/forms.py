@@ -9,6 +9,7 @@ from modeling.models import TradingModel
 from modeling.registry import registry_choices
 
 from . import spaces
+from .models import ModelSearch
 
 _SCORE_CHOICES = [("", "auto (task default)")] + [
     (s, s) for s in (*spaces.REGRESSION_SCORES, *spaces.CLASSIFICATION_SCORES)
@@ -52,6 +53,12 @@ def initial_from_search(search) -> dict:
         "max_candidates": search.max_candidates,
         "random_seed": search.random_seed,
         "scoring": search.scoring,
+        "scoring_mode": search.scoring_mode,
+        "wf_scheme": search.wf_scheme,
+        "wf_train_span": search.wf_train_span,
+        "wf_test_span": search.wf_test_span,
+        "wf_step": search.wf_step,
+        "wf_gap": search.wf_gap,
     }
 
 
@@ -95,6 +102,21 @@ class ModelSearchForm(forms.Form):
     max_candidates = forms.IntegerField(min_value=1, initial=40)
     random_seed = forms.IntegerField(initial=0)
     scoring = forms.ChoiceField(choices=_SCORE_CHOICES, required=False)
+    scoring_mode = forms.ChoiceField(
+        choices=ModelSearch.ScoringMode.choices,
+        initial=ModelSearch.ScoringMode.HOLDOUT,
+        required=False,
+        help_text="Walk-forward refits every candidate per fold - slower, closer to backtesting.",
+    )
+    wf_scheme = forms.ChoiceField(
+        choices=ModelSearch.WfScheme.choices, initial=ModelSearch.WfScheme.EXPANDING, required=False
+    )
+    wf_train_span = forms.IntegerField(
+        min_value=1, initial=250, required=False, label="WF train span"
+    )
+    wf_test_span = forms.IntegerField(min_value=1, initial=21, required=False, label="WF test span")
+    wf_step = forms.IntegerField(min_value=1, initial=21, required=False, label="WF step")
+    wf_gap = forms.IntegerField(min_value=0, initial=1, required=False, label="WF gap")
 
     def clean(self):
         data = super().clean()
@@ -134,4 +156,19 @@ class ModelSearchForm(forms.Form):
         data["feature_spec"] = feature_spec
         data["target_spec"] = target_spec
         data["search_space"] = search_space
+
+        # Walk-forward config is optional in the payload (e.g. a script/older
+        # client posting only the original fields) - fall back to each
+        # field's declared default rather than requiring it explicitly.
+        for name in (
+            "scoring_mode",
+            "wf_scheme",
+            "wf_train_span",
+            "wf_test_span",
+            "wf_step",
+            "wf_gap",
+        ):
+            if data.get(name) in (None, ""):
+                data[name] = self.fields[name].initial
+
         return data

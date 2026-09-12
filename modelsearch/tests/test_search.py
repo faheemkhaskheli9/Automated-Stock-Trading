@@ -2,7 +2,7 @@ from unittest import mock
 
 import pytest
 
-from modelsearch.models import ModelSearchResult, ModelSearchRun
+from modelsearch.models import ModelSearch, ModelSearchResult, ModelSearchRun
 from modelsearch.search import COST_FIELDS, _dominated, pareto_flags, run_search
 from modelsearch.tests.factories import make_instrument, make_price_series, make_search
 
@@ -67,6 +67,53 @@ def test_run_never_raises_when_dataset_cannot_be_built():
     assert run.status == ModelSearchRun.Status.FAILED
     assert "history" in run.error.lower() or run.error
     assert not ModelSearchResult.objects.filter(run=run).exists()
+
+
+def test_walk_forward_mode_scores_via_pooled_folds(inst):
+    search = make_search(
+        [inst],
+        search_space={"estimators": ["ridge"], "param_grids": {}},
+        scoring_mode=ModelSearch.ScoringMode.WALK_FORWARD,
+        wf_train_span=100,
+        wf_test_span=20,
+        wf_step=20,
+        wf_gap=1,
+    )
+    run = run_search(search)
+    assert run.status == ModelSearchRun.Status.SUCCESS, run.error
+
+    result = ModelSearchResult.objects.get(run=run, status="ok")
+    assert result.wf_folds and result.wf_folds > 1
+    assert "holdout" in result.metrics and "holdout_score" in result.metrics
+    # The walk-forward score is pooled over more rows than the single holdout.
+    assert result.metrics["n"] > result.metrics["holdout"]["n"]
+    # Ranking used the walk-forward score, not the stashed holdout one.
+    assert result.score == pytest.approx(result.metrics["directional_accuracy"])
+
+
+def test_walk_forward_mode_fails_run_when_history_too_short(inst):
+    search = make_search(
+        [inst],
+        search_space={"estimators": ["ridge"], "param_grids": {}},
+        scoring_mode=ModelSearch.ScoringMode.WALK_FORWARD,
+        wf_train_span=1000,  # far more sessions than the fixture has
+        wf_test_span=20,
+        wf_step=20,
+        wf_gap=1,
+    )
+    run = run_search(search)
+    assert run.status == ModelSearchRun.Status.FAILED
+    assert "walk-forward" in run.error.lower()
+    assert not ModelSearchResult.objects.filter(run=run).exists()
+
+
+def test_holdout_mode_is_still_the_default(inst):
+    search = make_search([inst], search_space={"estimators": ["ridge"], "param_grids": {}})
+    assert search.scoring_mode == ModelSearch.ScoringMode.HOLDOUT
+    run = run_search(search)
+    result = ModelSearchResult.objects.get(run=run, status="ok")
+    assert result.wf_folds is None
+    assert "holdout" not in result.metrics
 
 
 def test_dominated_derives_all_cost_axes_from_cost_fields():

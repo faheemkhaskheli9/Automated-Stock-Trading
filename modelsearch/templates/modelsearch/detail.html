@@ -2,7 +2,7 @@
 {% block content %}
 <main>
   <div class="intro">
-    <div><p class="eyebrow">MODEL SEARCH</p><h1>{{ search.name }}</h1><p class="muted">{{ search.task }} &middot; target: {{ search.target_spec.type }} &middot; ranking by <strong>{{ score_key }}</strong> &middot; {{ search.get_mode_display }}</p></div>
+    <div><p class="eyebrow">MODEL SEARCH</p><h1>{{ search.name }}</h1><p class="muted">{{ search.task }} &middot; target: {{ search.target_spec.type }} &middot; ranking by <strong>{{ score_key }}</strong> ({{ search.get_scoring_mode_display }}) &middot; {{ search.get_mode_display }}</p></div>
     <div>
       <a class="secondary" href="{% url 'modelsearch:edit' search.pk %}">Edit</a>
       <form method="post" class="inline-form"><input type="hidden" name="action" value="run">{% csrf_token %}<button class="primary" type="submit">Run search</button></form>
@@ -14,6 +14,7 @@
     <h2>Configuration</h2>
     <p class="muted">Instruments: {% for i in search.instruments.all %}{{ i.symbol }}{% if not forloop.last %}, {% endif %}{% empty %}none{% endfor %}</p>
     <p class="muted">Train window: {{ search.train_start|default:"(all)" }} &rarr; {{ search.train_end|default:"(all)" }} &middot; holdout {{ search.holdout_fraction }} &middot; max {{ search.max_candidates }} candidates</p>
+    {% if show_holdout_col %}<p class="muted">Walk-forward: {{ search.get_wf_scheme_display }} &middot; train {{ search.wf_train_span }} / test {{ search.wf_test_span }} / step {{ search.wf_step }} / gap {{ search.wf_gap }} sessions &middot; "Holdout score" is the same candidate's single-split score, for comparison.</p>{% endif %}
     <pre class="spec">feature_spec  = {{ search.feature_spec }}
 target_spec   = {{ search.target_spec }}
 search_space  = {{ search.search_space }}</pre>
@@ -50,7 +51,7 @@ search_space  = {{ search.search_space }}</pre>
   <div class="panel table-scroll">
     <h2 class="panel-title">Candidates</h2>
     <table>
-      <thead><tr><th>#</th><th>Estimator</th><th>Params</th><th>Score</th>{% for c in metric_cols %}<th>{{ c }}</th>{% endfor %}<th>Fit s</th><th>Predict ms/row</th><th>Size KB</th><th>Pareto</th><th></th></tr></thead>
+      <thead><tr><th>#</th><th>Estimator</th><th>Params</th><th>Score</th>{% if show_holdout_col %}<th>Holdout score</th><th>WF folds</th>{% endif %}{% for c in metric_cols %}<th>{{ c }}</th>{% endfor %}<th>Fit s</th><th>Predict ms/row</th><th>Size KB</th><th>Pareto</th><th></th></tr></thead>
       <tbody>
       {% for r in results %}
         <tr>
@@ -58,6 +59,7 @@ search_space  = {{ search.search_space }}</pre>
           <td>{{ r.estimator_key }}</td>
           <td>{% if r.status == 'failed' %}<span class="muted" title="{{ r.error }}">failed</span>{% else %}<code>{{ r.estimator_params }}</code>{% endif %}</td>
           <td>{{ r.score|floatformat:4|default:"&mdash;" }}</td>
+          {% if show_holdout_col %}<td>{{ r.display_holdout_score|default:"&mdash;" }}</td><td>{{ r.wf_folds|default:"&mdash;" }}</td>{% endif %}
           {% for v in r.display_metrics %}<td>{{ v|default:"&mdash;" }}</td>{% endfor %}
           <td>{{ r.fit_seconds|floatformat:3|default:"&mdash;" }}</td>
           <td>{{ r.predict_latency_ms|floatformat:3|default:"&mdash;" }}</td>
@@ -66,7 +68,7 @@ search_space  = {{ search.search_space }}</pre>
           <td>{% if r.status == 'ok' %}<form method="post" class="inline-form"><input type="hidden" name="action" value="promote"><input type="hidden" name="result" value="{{ r.pk }}">{% csrf_token %}<button class="secondary" type="submit">Promote</button></form>{% endif %}</td>
         </tr>
       {% empty %}
-        <tr><td colspan="12" class="empty">No results yet. Press "Run search".</td></tr>
+        <tr><td colspan="14" class="empty">No results yet. Press "Run search".</td></tr>
       {% endfor %}
       </tbody>
     </table>
