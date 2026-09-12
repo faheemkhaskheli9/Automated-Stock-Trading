@@ -29,7 +29,7 @@ def test_gate_passes_with_low_bar(item):
 def test_gate_blocks_on_high_accuracy_requirement(item, monkeypatch):
     # Pin the model's measured stats so the gate threshold is what's tested,
     # not the (perfectly predictable) synthetic training series.
-    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m: None)
+    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m, board=None: None)
     monkeypatch.setattr(
         "signalfeed.gate._holdout_stats",
         lambda m: {"source": "holdout", "n": 20, "directional_accuracy": 0.52, "skill": 0.01},
@@ -58,7 +58,7 @@ def test_gate_blocks_inactive_model(item):
 
 
 def test_gate_skill_requirement(item, monkeypatch):
-    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m: None)
+    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m, board=None: None)
     monkeypatch.setattr(
         "signalfeed.gate._holdout_stats",
         lambda m: {"source": "holdout", "n": 20, "directional_accuracy": 0.8, "skill": 0.02},
@@ -70,7 +70,7 @@ def test_gate_skill_requirement(item, monkeypatch):
 
 
 def test_gate_skill_not_computable_blocks_when_required(item, monkeypatch):
-    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m: None)
+    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m, board=None: None)
     monkeypatch.setattr(
         "signalfeed.gate._holdout_stats",
         lambda m: {"source": "holdout", "n": 20, "directional_accuracy": 0.8, "skill": None},
@@ -79,3 +79,26 @@ def test_gate_skill_not_computable_blocks_when_required(item, monkeypatch):
     result = evaluate_gate(item)
     assert not result.passed
     assert "not computable" in result.reason
+
+
+def test_gate_accepts_a_prebuilt_leaderboard(item, monkeypatch):
+    """A caller evaluating several watch items in one request/task can build
+    the leaderboard once and pass it in - evaluate_gate must use it instead
+    of building its own."""
+    calls = {"build": 0}
+
+    def fake_build_leaderboard(window_days):
+        calls["build"] += 1
+        return object()
+
+    monkeypatch.setattr("modeling.leaderboard.build_leaderboard", fake_build_leaderboard)
+    monkeypatch.setattr(
+        "signalfeed.gate._holdout_stats",
+        lambda m: {"source": "holdout", "n": 20, "directional_accuracy": 0.8, "skill": 0.1},
+    )
+
+    class _EmptyBoard:
+        ranked = []
+
+    evaluate_gate(item, board=_EmptyBoard())
+    assert calls["build"] == 0  # never rebuilt the leaderboard

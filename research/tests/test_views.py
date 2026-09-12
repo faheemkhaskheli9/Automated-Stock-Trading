@@ -1,9 +1,11 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 import pytest
 from django.urls import reverse
 
 from research.models import CompanyFundamental, NewsItem, ResearchSnapshot
+from research.views import _as_of_datetime
 
 from .factories import make_instrument
 
@@ -28,6 +30,25 @@ def _news(symbol="ENGRO", **kw):
     )
     defaults.update(kw)
     return NewsItem.objects.create(**defaults)
+
+
+# --- _as_of_datetime -------------------------------------------------
+def test_as_of_datetime_uses_project_local_midnight():
+    """Must match the Asia/Karachi 'next local midnight' point-in-time
+    convention used by the automated research/forecasting pipeline, not
+    UTC midnight - otherwise a manual snapshot's cutoff disagrees with the
+    scheduled one for the same as_of date."""
+    result = _as_of_datetime(date(2026, 2, 2))
+    assert result == datetime(2026, 2, 2, 0, 0, tzinfo=ZoneInfo("Asia/Karachi"))
+    # Asia/Karachi is UTC+5, so local midnight is 19:00 UTC the day before -
+    # not UTC midnight, which is what the old (buggy) implementation used.
+    assert result.astimezone(UTC) == datetime(2026, 2, 1, 19, 0, tzinfo=UTC)
+
+
+def test_as_of_datetime_none_uses_now():
+    before = datetime.now(UTC)
+    result = _as_of_datetime(None)
+    assert result >= before
 
 
 # --- index -----------------------------------------------------------

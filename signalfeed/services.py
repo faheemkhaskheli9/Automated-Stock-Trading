@@ -187,6 +187,18 @@ def generate_weekly_signals(as_of: date | None = None) -> list[SignalOutcome]:
 
     outcomes: list[SignalOutcome] = []
     items = WatchItem.objects.filter(is_active=True).select_related("instrument", "trading_model")
+
+    # Built once and shared across every watch item's evaluate_gate() call
+    # below, instead of once per item - the leaderboard already scores every
+    # active model in one pass.
+    try:
+        from modeling.leaderboard import DEFAULT_WINDOW, build_leaderboard
+
+        board = build_leaderboard(window_days=DEFAULT_WINDOW)
+    except Exception:  # noqa: BLE001 - evaluate_gate falls back per-model
+        logger.exception("signalfeed: leaderboard build failed")
+        board = None
+
     for item in items:
         model = item.trading_model
         try:
@@ -197,7 +209,7 @@ def generate_weekly_signals(as_of: date | None = None) -> list[SignalOutcome]:
         derived = target_mod.derive_target_date(model.target_spec, monday)
         target_date = derived or (monday + timedelta(days=4))
         reference_close = _reference_close(item.instrument, decision_moment)
-        gate = evaluate_gate(item)
+        gate = evaluate_gate(item, board=board)
 
         base_defaults = {
             "watch_item": item,
@@ -208,7 +220,7 @@ def generate_weekly_signals(as_of: date | None = None) -> list[SignalOutcome]:
             "flat_threshold_pct": item.min_expected_move_pct,
             "model_stats": gate.stats,
             "confidence": gate.stats.get("directional_accuracy"),
-            # No sizing hint unless the call below turns out deliverable.
+            # No sizing hint unless the outcome below turns out deliverable.
             "suggested_fraction": None,
             "suggested_notional": None,
             "suggested_shares": None,
@@ -228,53 +240,45 @@ def generate_weekly_signals(as_of: date | None = None) -> list[SignalOutcome]:
                 item.instrument.symbol,
                 model.pk,
             )
-            sig, _ = WeeklySignal.objects.update_or_create(
-                instrument=item.instrument,
-                trading_model=model,
-                target_date=target_date,
-                defaults={
-                    **base_defaults,
-                    "model_prediction": None,
-                    "direction": WeeklySignal.Direction.FLAT,
-                    "predicted_close": None,
-                    "expected_return_pct": None,
-                    "status": WeeklySignal.Status.ERROR,
-                    "suppression_reason": f"prediction failed: {exc}"[:255],
-                },
+            outcome_defaults = {
+                "model_prediction": None,
+                "direction": WeeklySignal.Direction.FLAT,
+                "predicted_close": None,
+                "expected_return_pct": None,
+                "status": WeeklySignal.Status.ERROR,
+                "suppression_reason": f"prediction failed: {exc}"[:255],
+            }
+        else:
+            predicted_close, expected_return_pct, direction = _interpret(
+                ttype, pred, reference_close, item.min_expected_move_pct
             )
-            outcomes.append(SignalOutcome(sig))
-            continue
+            status = WeeklySignal.Status.PENDING if gate.passed else WeeklySignal.Status.SUPPRESSED
 
-        predicted_close, expected_return_pct, direction = _interpret(
-            ttype, pred, reference_close, item.min_expected_move_pct
-        )
-        status = WeeklySignal.Status.PENDING if gate.passed else WeeklySignal.Status.SUPPRESSED
-
-        size_defaults = {}
-        if status == WeeklySignal.Status.PENDING:
-            size = _size_hint(item, direction, gate.stats, reference_close)
-            if size is not None:
-                size_defaults = {
-                    "suggested_fraction": size.fraction,
-                    "suggested_notional": size.notional,
-                    "suggested_shares": size.shares,
-                    "sizing_basis": size.basis,
-                }
-
-        sig, _ = WeeklySignal.objects.update_or_create(
-            instrument=item.instrument,
-            trading_model=model,
-            target_date=target_date,
-            defaults={
-                **base_defaults,
-                **size_defaults,
+            outcome_defaults = {
                 "model_prediction": pred,
                 "direction": direction,
                 "predicted_close": predicted_close,
                 "expected_return_pct": expected_return_pct,
                 "status": status,
                 "suppression_reason": "" if gate.passed else gate.reason[:255],
-            },
+            }
+            if status == WeeklySignal.Status.PENDING:
+                size = _size_hint(item, direction, gate.stats, reference_close)
+                if size is not None:
+                    outcome_defaults.update(
+                        {
+                            "suggested_fraction": size.fraction,
+                            "suggested_notional": size.notional,
+                            "suggested_shares": size.shares,
+                            "sizing_basis": size.basis,
+                        }
+                    )
+
+        sig, _ = WeeklySignal.objects.update_or_create(
+            instrument=item.instrument,
+            trading_model=model,
+            target_date=target_date,
+            defaults={**base_defaults, **outcome_defaults},
         )
         outcomes.append(SignalOutcome(sig))
     return outcomes
@@ -389,6 +393,7 @@ def recap_weekly_signals(
 
     week_qs = WeeklySignal.objects.filter(
         was_correct__isnull=False,
+        status=WeeklySignal.Status.SENT,
         target_date__gte=as_of - timedelta(days=7),
         target_date__lt=as_of,
     ).select_related("instrument")

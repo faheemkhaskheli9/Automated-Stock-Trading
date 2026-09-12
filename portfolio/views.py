@@ -14,6 +14,8 @@ from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
+from AutomaticStockTrading.scoping import scope_to_owner
+
 from .forms import AccountForm
 from .models import Account
 
@@ -21,10 +23,7 @@ ACCOUNT_PAGE_SIZE = 25
 
 
 def _scoped(request):
-    qs = Account.objects.all()
-    if not request.user.is_staff:
-        qs = qs.filter(owner=request.user)
-    return qs
+    return scope_to_owner(Account.objects.all(), request, owner_lookup="owner")
 
 
 @login_required(login_url="marketdata:login")
@@ -36,7 +35,8 @@ def account_list(request):
         {
             "obj": a,
             "equity": a.equity,
-            "positions": a.positions.count(),
+            # len() on the prefetched queryset avoids a per-account COUNT(*).
+            "positions": len(a.positions.all()),
         }
         for a in page
     ]
@@ -74,7 +74,11 @@ def account_detail(request, pk):
 @require_http_methods(["GET", "POST"])
 def account_edit(request, pk=None):
     instance = get_object_or_404(_scoped(request), pk=pk) if pk else None
-    form = AccountForm(request.POST or None, instance=instance, owner=request.user)
+    # Validate the name-uniqueness check against the account's actual owner
+    # (not the logged-in staff user) when a staff user edits someone else's
+    # account.
+    owner = instance.owner if instance else request.user
+    form = AccountForm(request.POST or None, instance=instance, owner=owner)
     if request.method == "POST" and form.is_valid():
         obj = form.save(commit=False)
         if obj.owner_id is None:

@@ -74,9 +74,18 @@ def index(request):
 @require_http_methods(["GET"])
 def watchlist(request):
     """Every watch item + its model's live gate verdict."""
+    from modeling.leaderboard import DEFAULT_WINDOW, build_leaderboard
+
     items = WatchItem.objects.select_related("instrument", "trading_model")
     page = Paginator(items, WATCH_PAGE_SIZE).get_page(request.GET.get("page"))
-    rows = [(item, evaluate_gate(item)) for item in page]
+    # Built once for the whole page instead of once per row - evaluate_gate's
+    # leaderboard lookup already scores every active model in one pass.
+    try:
+        board = build_leaderboard(window_days=DEFAULT_WINDOW)
+    except Exception:  # noqa: BLE001 - evaluate_gate falls back per-model
+        logger.exception("watchlist: leaderboard build failed")
+        board = None
+    rows = [(item, evaluate_gate(item, board=board)) for item in page]
     return render(request, "signalfeed/watchlist.html", {"rows": rows, "page": page})
 
 

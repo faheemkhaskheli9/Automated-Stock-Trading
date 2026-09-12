@@ -9,8 +9,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, time
-from datetime import timezone as py_timezone
+from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.paginator import Paginator
@@ -34,9 +35,13 @@ FUNDAMENTAL_PAGE_SIZE = 25
 
 
 def _as_of_datetime(day):
+    """Local (Asia/Karachi) midnight for ``day`` - matches the "next local
+    midnight" point-in-time cutoff used by the automated research/forecasting
+    pipeline (see signalfeed.services._local_midnight), so a manually built
+    snapshot's cutoff agrees with the scheduled one for the same date."""
     if day is None:
         return timezone.now()
-    return datetime.combine(day, time.min, tzinfo=py_timezone.utc)
+    return datetime.combine(day, time.min, tzinfo=ZoneInfo(settings.TIME_ZONE))
 
 
 @login_required(login_url="marketdata:login")
@@ -72,8 +77,8 @@ def index(request):
             "news_query": _keep("news"),
             "fund_query": _keep("fund"),
             "form": SyncForm(initial={"exchange": "PSX"}),
-            "news_total": NewsItem.objects.count(),
-            "snapshot_total": ResearchSnapshot.objects.count(),
+            "news_total": headlines.paginator.count,
+            "snapshot_total": snapshots.paginator.count,
         },
     )
 

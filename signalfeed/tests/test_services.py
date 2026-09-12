@@ -1,4 +1,5 @@
 from datetime import date
+from unittest import mock
 
 import pytest
 
@@ -81,7 +82,7 @@ def test_generate_no_sizing_hint_when_suppressed(watch, monkeypatch):
         "signalfeed.gate._holdout_stats",
         lambda m: {"source": "holdout", "n": 20, "directional_accuracy": 0.50, "skill": 0.0},
     )
-    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m: None)
+    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m, board=None: None)
     item.sizing_capital = 100_000
     item.min_directional_accuracy = 0.60
     item.save(update_fields=["sizing_capital", "min_directional_accuracy"])
@@ -113,7 +114,7 @@ def test_generate_suppresses_when_gate_fails(watch, monkeypatch):
         "signalfeed.gate._holdout_stats",
         lambda m: {"source": "holdout", "n": 20, "directional_accuracy": 0.50, "skill": 0.0},
     )
-    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m: None)
+    monkeypatch.setattr("signalfeed.gate._live_stats", lambda m, board=None: None)
     item.min_directional_accuracy = 0.60
     item.save(update_fields=["min_directional_accuracy"])
     sig = services.generate_weekly_signals(MON)[0].signal
@@ -179,6 +180,46 @@ def test_recap_backfills_actuals_and_grades(watch, monkeypatch):
     assert sig.was_correct is not None
     assert summary["scored_now"] == 1
     assert summary["week_total"] == 1
+
+
+def test_generate_builds_leaderboard_once_for_all_watch_items():
+    """The accuracy leaderboard is expensive (scores every active model) -
+    generate_weekly_signals must build it once per call, not once per watch
+    item, even with several active items on the watchlist."""
+    import modeling.leaderboard as lb_mod
+
+    inst1 = make_instrument("ONE")
+    inst2 = make_instrument("TWO")
+    make_price_series(inst1, n=420)
+    make_price_series(inst2, n=420)
+    model1 = make_weekly_model([inst1])
+    model2 = make_weekly_model([inst2])
+    make_watch_item(inst1, model1)
+    make_watch_item(inst2, model2)
+
+    with mock.patch.object(lb_mod, "build_leaderboard", wraps=lb_mod.build_leaderboard) as spy:
+        outcomes = services.generate_weekly_signals(MON)
+    assert len(outcomes) == 2
+    assert spy.call_count == 1
+
+
+def test_recap_excludes_unsent_signals_from_week_totals(watch, monkeypatch):
+    """A signal that was never SENT (e.g. suppressed by the gate, but still
+    carrying a direction and later graded) must not be counted in the
+    week's hit-rate - only delivered calls count."""
+    monkeypatch.setattr("signalfeed.delivery.deliver", lambda s, m, channels=None: ["email"])
+    services.generate_weekly_signals(MON)
+    sig = WeeklySignal.objects.get()
+    sig.status = WeeklySignal.Status.SUPPRESSED  # never delivered
+    sig.save(update_fields=["status"])
+
+    summary = services.recap_weekly_signals(date(2026, 2, 9))
+    sig.refresh_from_db()
+    # It still gets graded (actual_close backfilled)...
+    assert sig.was_correct is not None
+    # ...but must not appear in the week's SENT-only tally.
+    assert summary["week_total"] == 0
+    assert summary["week_hits"] == 0
 
 
 def test_train_weekly_models_retrains_watchlist(watch):

@@ -1,7 +1,7 @@
-from django.db.models import Q
 from rest_framework import mixins, viewsets
 from rest_framework.permissions import IsAuthenticated
 
+from AutomaticStockTrading.scoping import scope_to_owner
 from backtesting.models import Backtest, BacktestRun
 from execution.models import Order, Trade
 from forecasting.models import ForecastBacktestRun
@@ -53,10 +53,7 @@ class OwnerScopedMixin:
     owner_lookup: str = "owner"
 
     def get_queryset(self):
-        qs = super().get_queryset()
-        if self.request.user.is_staff:
-            return qs
-        return qs.filter(Q(**{self.owner_lookup: self.request.user}))
+        return scope_to_owner(super().get_queryset(), self.request, owner_lookup=self.owner_lookup)
 
 
 class InstrumentViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):

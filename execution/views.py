@@ -22,6 +22,7 @@ from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_http_methods
 
+from AutomaticStockTrading.scoping import scope_to_owner
 from portfolio.models import Account
 from risk.models import RiskDecision
 from strategies.signals import Action
@@ -38,9 +39,7 @@ ORDER_PAGE_SIZE = 50
 
 def _scoped_orders(request):
     qs = Order.objects.select_related("account", "instrument", "strategy")
-    if not request.user.is_staff:
-        qs = qs.filter(account__owner=request.user)
-    return qs
+    return scope_to_owner(qs, request, owner_lookup="account__owner")
 
 
 @login_required(login_url="marketdata:login")

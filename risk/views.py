@@ -7,15 +7,15 @@ from django.core.paginator import Paginator
 from django.shortcuts import render
 from django.views.decorators.http import require_http_methods
 
+from AutomaticStockTrading.scoping import scope_to_owner
+
 from .models import DailyEquitySnapshot, RiskDecision
 
 PAGE_SIZE = 50
 
 
 def _scope(qs, request, path="account__owner"):
-    if request.user.is_staff:
-        return qs
-    return qs.filter(**{path: request.user})
+    return scope_to_owner(qs, request, owner_lookup=path)
 
 
 @login_required(login_url="marketdata:login")

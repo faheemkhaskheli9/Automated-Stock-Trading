@@ -23,14 +23,15 @@ class GateResult:
     stats: dict = field(default_factory=dict)
 
 
-def _live_stats(model) -> dict | None:
+def _live_stats(model, board=None) -> dict | None:
     from modeling.leaderboard import DEFAULT_WINDOW, build_leaderboard
 
-    try:
-        board = build_leaderboard(window_days=DEFAULT_WINDOW)
-    except Exception:  # noqa: BLE001 - the gate must never blow up
-        logger.exception("gate: leaderboard build failed")
-        return None
+    if board is None:
+        try:
+            board = build_leaderboard(window_days=DEFAULT_WINDOW)
+        except Exception:  # noqa: BLE001 - the gate must never blow up
+            logger.exception("gate: leaderboard build failed")
+            return None
     for row in board.ranked:
         if row.model.pk == model.pk and row.n:
             return {
@@ -57,7 +58,12 @@ def _holdout_stats(model) -> dict | None:
     }
 
 
-def evaluate_gate(item) -> GateResult:
+def evaluate_gate(item, board=None) -> GateResult:
+    """Evaluate ``item``'s model against the accuracy gate. ``board`` is an
+    optional, pre-built ``modeling.leaderboard`` result - pass one in when
+    evaluating several watch items in the same request/task so the
+    leaderboard (itself several queries per active model) is built once
+    instead of once per item."""
     model = item.trading_model
     if model is None:
         return GateResult(False, "watch item has no trading model")
@@ -66,7 +72,7 @@ def evaluate_gate(item) -> GateResult:
     if not model.artifact_path:
         return GateResult(False, "model has not been trained yet")
 
-    stats = _live_stats(model) or _holdout_stats(model)
+    stats = _live_stats(model, board=board) or _holdout_stats(model)
     if not stats:
         return GateResult(
             False, "no accuracy stats yet - train the model / let predictions accumulate"

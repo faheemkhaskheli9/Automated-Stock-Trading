@@ -34,24 +34,20 @@ class _Candidate:
     estimator_params: dict
 
 
+# Pareto cost axes - lower is better on each; "score" is the one
+# higher-is-better axis. Adding a new cost dimension only means adding it
+# here; _dominated() and the row-building call site both derive from it.
+COST_FIELDS = ("fit_seconds", "predict_latency_ms", "model_size_bytes")
+
+
 def _dominated(a: dict, others: list[dict]) -> bool:
     """True if some other candidate is >= on score and <= on every cost, and
     strictly better on at least one axis."""
     for b in others:
         if b is a:
             continue
-        not_worse = (
-            b["score"] >= a["score"]
-            and b["fit_seconds"] <= a["fit_seconds"]
-            and b["predict_latency_ms"] <= a["predict_latency_ms"]
-            and b["model_size_bytes"] <= a["model_size_bytes"]
-        )
-        strictly_better = (
-            b["score"] > a["score"]
-            or b["fit_seconds"] < a["fit_seconds"]
-            or b["predict_latency_ms"] < a["predict_latency_ms"]
-            or b["model_size_bytes"] < a["model_size_bytes"]
-        )
+        not_worse = b["score"] >= a["score"] and all(b[f] <= a[f] for f in COST_FIELDS)
+        strictly_better = b["score"] > a["score"] or any(b[f] < a[f] for f in COST_FIELDS)
         if not_worse and strictly_better:
             return True
     return False
@@ -152,15 +148,7 @@ def run_search(search, *, created_by=None) -> ModelSearchRun:
             row.rank = i
         if scored:
             frontier = pareto_flags(
-                [
-                    {
-                        "score": r.score,
-                        "fit_seconds": r.fit_seconds,
-                        "predict_latency_ms": r.predict_latency_ms,
-                        "model_size_bytes": r.model_size_bytes,
-                    }
-                    for r in scored
-                ]
+                [{"score": r.score, **{f: getattr(r, f) for f in COST_FIELDS}} for r in scored]
             )
             for row, flag in zip(scored, frontier):
                 row.is_pareto = flag

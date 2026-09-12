@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 
 from modelsearch.models import ModelSearchResult, ModelSearchRun
-from modelsearch.search import pareto_flags, run_search
+from modelsearch.search import COST_FIELDS, _dominated, pareto_flags, run_search
 from modelsearch.tests.factories import make_instrument, make_price_series, make_search
 
 pytestmark = pytest.mark.django_db
@@ -67,6 +67,17 @@ def test_run_never_raises_when_dataset_cannot_be_built():
     assert run.status == ModelSearchRun.Status.FAILED
     assert "history" in run.error.lower() or run.error
     assert not ModelSearchResult.objects.filter(run=run).exists()
+
+
+def test_dominated_derives_all_cost_axes_from_cost_fields():
+    """_dominated must compare every axis in COST_FIELDS (plus score), not a
+    hand-typed subset - this catches the axes silently going out of sync if
+    COST_FIELDS is ever extended without updating _dominated."""
+    base = {"score": 1.0, **{f: 1.0 for f in COST_FIELDS}}
+    for field in COST_FIELDS:
+        worse = {**base, field: 2.0}  # strictly worse on exactly one cost axis
+        assert _dominated(worse, [base, worse])
+        assert not _dominated(base, [base, worse])
 
 
 def test_pareto_flags_marks_non_dominated():
