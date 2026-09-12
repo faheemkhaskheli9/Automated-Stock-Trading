@@ -90,6 +90,25 @@ Every candidate also stores the full `modeling.metrics` blob it was ranked on.
   fold fails the whole run (same as `backtesting`) rather than silently
   falling back to holdout.
 
+## Auto-ensemble
+
+After the sweep finishes, `run_search` also tries one extra
+`voting_ensemble` candidate (see `modeling`'s estimator of the same name)
+averaging the `ModelSearch.auto_ensemble_top_k` best-scoring **distinct**
+base estimators from the run just completed (default `3`; `0` or `1`
+disables it). This is regression-only (`voting_ensemble` doesn't support
+classification) and skips:
+
+- baseline estimators (`naive_last` / `drift` / `seasonal_naive`) as
+  members - same rule `modeling.estimators._build_voting_ensemble` enforces,
+- adding a duplicate when the operator already swept a `voting_ensemble`
+  candidate with the exact same membership (matched by params hash).
+
+The auto candidate competes for rank / Pareto status exactly like any
+manually-swept one - it isn't bolted on separately - so a search over
+several single models gets a free "does averaging the winners help"
+comparison point without hand-adding it to `search_space`.
+
 ## Pareto front
 
 `ModelSearchResult.is_pareto` marks candidates **not dominated** on all four of

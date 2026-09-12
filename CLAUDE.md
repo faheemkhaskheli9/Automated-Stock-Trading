@@ -343,6 +343,12 @@ actual-value backfill.
   trees / `mlp` + trivial baselines (`naive_last`/`drift`/`seasonal_naive`,
   which read an `ohlc` close-lag column); `lstm` needs the optional
   `requirements-ml.txt` torch extra and is otherwise "unavailable".
+  `voting_ensemble`/`stacking_ensemble` are meta-estimators over 2+ other
+  registered non-baseline regressors named in an `estimators` param
+  (registry-lazy member resolution via `_resolve_ensemble_members`,
+  `modeling/estimators.py`); `stacking_ensemble` adds a `final_estimator`
+  (registry key, default `ridge`) + `cv` (default 5) trained on the base
+  models' out-of-fold predictions instead of a plain average.
 - `features.py`: point-in-time feature builder - `ohlc`/`return`/`technical`
   (from `research`)/`research`/`strategy_signal` (a `strategies` `Strategy`
   or key, mapped to {-1,0,1})/`manual_signal`/`calendar`. `validate_spec`
@@ -397,6 +403,11 @@ Routed at `/model-search/`. Adds no dependencies (reuses `modeling`).
   dominated on score up / fit time down / predict latency down / size down).
   A bad candidate -> a `failed` `ModelSearchResult`, loop continues; a
   whole-run failure lands on `ModelSearchRun`. No per-candidate artifacts.
+  After the sweep, `_auto_ensemble_candidates()` also tries one
+  `voting_ensemble` candidate averaging the top `auto_ensemble_top_k`
+  (default 3, 0/1 disables) distinct-key OK results - regression only,
+  excludes baselines and an already-swept identical `voting_ensemble`
+  (params-hash dedup) - competes for rank/Pareto like any other candidate.
 - `services.py` (deferred imports): `run_search`, `promote_result(result)` ->
   a new `modeling.TradingModel` (estimator+params from the result, specs from
   the search); `full_clean`'d, **not** auto-trained.

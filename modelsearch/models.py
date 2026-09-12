@@ -58,6 +58,13 @@ class ModelSearch(models.Model):
         default=40, help_text="Cap on candidates evaluated in one run."
     )
     random_seed = models.IntegerField(default=0)
+    auto_ensemble_top_k = models.PositiveIntegerField(
+        default=3,
+        help_text=(
+            "After scoring the sweep, also try one voting_ensemble candidate averaging the "
+            "top N distinct-estimator results (regression tasks only). 0 or 1 disables."
+        ),
+    )
     scoring = models.CharField(
         max_length=32,
         blank=True,

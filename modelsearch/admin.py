@@ -5,7 +5,14 @@ from .models import ModelSearch, ModelSearchResult, ModelSearchRun
 
 @admin.register(ModelSearch)
 class ModelSearchAdmin(admin.ModelAdmin):
-    list_display = ("name", "mode", "max_candidates", "scoring", "updated_at")
+    list_display = (
+        "name",
+        "mode",
+        "max_candidates",
+        "scoring",
+        "auto_ensemble_top_k",
+        "updated_at",
+    )
     list_filter = ("mode",)
     search_fields = ("name",)
     filter_horizontal = ("instruments",)

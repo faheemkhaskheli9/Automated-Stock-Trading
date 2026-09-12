@@ -52,6 +52,7 @@ def initial_from_search(search) -> dict:
         "mode": search.mode,
         "max_candidates": search.max_candidates,
         "random_seed": search.random_seed,
+        "auto_ensemble_top_k": search.auto_ensemble_top_k,
         "scoring": search.scoring,
         "scoring_mode": search.scoring_mode,
         "wf_scheme": search.wf_scheme,
@@ -101,6 +102,16 @@ class ModelSearchForm(forms.Form):
     )
     max_candidates = forms.IntegerField(min_value=1, initial=40)
     random_seed = forms.IntegerField(initial=0)
+    auto_ensemble_top_k = forms.IntegerField(
+        min_value=0,
+        initial=3,
+        required=False,
+        label="Auto-ensemble top N",
+        help_text=(
+            "Also try a voting_ensemble of the top N distinct estimators after the sweep "
+            "(regression only). 0 or 1 disables."
+        ),
+    )
     scoring = forms.ChoiceField(choices=_SCORE_CHOICES, required=False)
     scoring_mode = forms.ChoiceField(
         choices=ModelSearch.ScoringMode.choices,
@@ -167,6 +178,7 @@ class ModelSearchForm(forms.Form):
             "wf_test_span",
             "wf_step",
             "wf_gap",
+            "auto_ensemble_top_k",
         ):
             if data.get(name) in (None, ""):
                 data[name] = self.fields[name].initial

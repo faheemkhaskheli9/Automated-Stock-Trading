@@ -116,6 +116,62 @@ def test_holdout_mode_is_still_the_default(inst):
     assert "holdout" not in result.metrics
 
 
+def test_auto_ensemble_adds_voting_candidate_of_top_estimators(inst):
+    search = make_search(
+        [inst],
+        search_space={"estimators": ["ridge", "random_forest", "lasso"], "param_grids": {}},
+    )
+    assert search.auto_ensemble_top_k == 3
+    run = run_search(search)
+    assert run.status == ModelSearchRun.Status.SUCCESS, run.error
+
+    ensemble = ModelSearchResult.objects.get(run=run, estimator_key="voting_ensemble")
+    assert ensemble.status == "ok"
+    keys = set(ensemble.estimator_params["estimators"].split(","))
+    assert keys <= {"ridge", "random_forest", "lasso"}
+    assert len(keys) >= 2
+    # It competes for rank/pareto like any other candidate, not bolted on the side.
+    assert ensemble.rank is not None
+
+
+def test_auto_ensemble_disabled_when_top_k_below_two(inst):
+    search = make_search(
+        [inst],
+        search_space={"estimators": ["ridge", "random_forest"], "param_grids": {}},
+        auto_ensemble_top_k=1,
+    )
+    run = run_search(search)
+    assert run.status == ModelSearchRun.Status.SUCCESS, run.error
+    assert not ModelSearchResult.objects.filter(run=run, estimator_key="voting_ensemble").exists()
+
+
+def test_auto_ensemble_skipped_for_classification(inst):
+    search = make_search(
+        [inst],
+        search_space={"estimators": ["logistic"], "param_grids": {}},
+        target_spec={"type": "direction", "horizon": 1},
+    )
+    run = run_search(search)
+    assert run.status == ModelSearchRun.Status.SUCCESS, run.error
+    assert not ModelSearchResult.objects.filter(run=run, estimator_key="voting_ensemble").exists()
+
+
+def test_auto_ensemble_skips_duplicate_of_manual_candidate(inst):
+    search = make_search(
+        [inst],
+        search_space={
+            "estimators": ["ridge", "random_forest", "voting_ensemble"],
+            "param_grids": {"voting_ensemble": {"estimators": ["ridge,random_forest"]}},
+        },
+        auto_ensemble_top_k=2,
+    )
+    run = run_search(search)
+    assert run.status == ModelSearchRun.Status.SUCCESS, run.error
+    # Only the manually-swept voting_ensemble candidate exists - the
+    # auto-ensemble step must not duplicate the same params hash.
+    assert ModelSearchResult.objects.filter(run=run, estimator_key="voting_ensemble").count() == 1
+
+
 def test_dominated_derives_all_cost_axes_from_cost_fields():
     """_dominated must compare every axis in COST_FIELDS (plus score), not a
     hand-typed subset - this catches the axes silently going out of sync if

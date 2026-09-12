@@ -58,6 +58,18 @@ see `/modeling/estimators/` for the live list and each one's params.
   differently-biased models is usually a cheap, low-risk accuracy win over
   any one of them alone - it's the natural first thing to try from
   `modelsearch` results instead of hand-picking a single winner.
+  `modelsearch` also tries this automatically after a sweep - see
+  `docs/MODEL_SEARCH.md`'s "Auto-ensemble" section.
+- **`stacking_ensemble`** (`sklearn.ensemble.StackingRegressor`): same
+  registry-lazy `estimators` member resolution as `voting_ensemble`, plus a
+  `final_estimator` (registry key, default `ridge`) trained on the base
+  models' out-of-fold predictions (`cv` folds, default 5, minimum 2) instead
+  of a plain average. Higher accuracy ceiling than voting when the base
+  models are meaningfully different, at the cost of `cv`x more fits per
+  training call. `StackingRegressor.fit` does its own internal CV split on
+  whatever training rows it's given, so it stays leak-free under
+  `backtesting`'s per-fold refit the same way any other estimator does - no
+  special-casing needed there.
 - **Baselines**: `naive_last`, `drift`, `seasonal_naive` - trivial
   references for the skill-vs-naive number. They read one input column and
   therefore need an `ohlc` source with the matching close lag in the

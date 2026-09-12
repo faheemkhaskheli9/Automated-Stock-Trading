@@ -39,38 +39,53 @@ GitHub Projects board #5 alongside Phase 7/8/9 work (per project convention).
   ::DashboardKpiTests`, new `signalfeed/tests/test_services.py` cases for
   `trailing_hit_rate`).
 
+## Done 2026-09-13 (session 3)
+
+- **Wire `voting_ensemble` into `modelsearch`'s default search spaces**
+  (`modelsearch/search.py::_auto_ensemble_candidates`): after a sweep
+  finishes, `run_search` automatically evaluates one extra
+  `voting_ensemble` candidate averaging the top `ModelSearch
+  .auto_ensemble_top_k` (new field, default 3, migration `0003`) distinct
+  best-scoring base estimators from the run just completed - regression
+  tasks only, excludes baseline estimators and a manually-swept
+  `voting_ensemble` with the same membership (params-hash dedup). Competes
+  for rank/Pareto like any other candidate rather than being bolted on
+  separately. Wired through `forms.py`/`views.py::_save`/`admin.py`
+  (generic form template needed no template change). Tested
+  (`modelsearch/tests/test_search.py`: added, disabled-below-2, skipped for
+  classification, dedup-vs-manual cases); documented in
+  `docs/MODEL_SEARCH.md` and `CLAUDE.md`. This was Models backlog item #1.
+- **`stacking_ensemble` estimator** (`modeling/estimators.py`):
+  `sklearn.ensemble.StackingRegressor` over the same registry-lazy
+  `estimators` member resolution as `voting_ensemble` (factored into a
+  shared `_resolve_ensemble_members` helper), plus a `final_estimator`
+  (registry key, default `ridge`) trained on the base models' out-of-fold
+  predictions (`cv` folds, default 5). Verified leak-free under
+  `backtesting`'s per-fold refit: `StackingRegressor.fit` does its own
+  internal CV split on whatever training rows it receives, same as any
+  other estimator's `.fit()`. `explain.py` already degrades to `None` for
+  it (no special-casing needed - it has neither `coef_` nor
+  `feature_importances_`, same path as `voting_ensemble`/`mlp`). Tested
+  (`modeling/tests/test_estimators.py`), documented in `docs/MODELING.md`
+  and `CLAUDE.md`. This was Models backlog item #2 (stacking ensemble).
+
 ## Models — next candidates (ranked)
 
-1. **Wire `voting_ensemble` into `modelsearch`'s default search spaces** so
-   a search over a base model automatically tries an ensemble of its own
-   top candidates, not just single estimators. Small: extend
-   `modelsearch`'s seed/`search_space` builder (or just document the
-   pattern — seed a `ModelSearch`, then hand-add a `voting_ensemble`
-   candidate referencing the top 2-3 result estimator keys) plus a
-   `promote_result` smoke test.
-2. **Stacking (meta-learner) ensemble**, `sklearn.ensemble.StackingRegressor`
-   — same registry-lazy pattern as `voting_ensemble` but with a final
-   estimator (default `ridge`) trained on the base models' out-of-fold
-   predictions. Higher ceiling than voting, needs its own CV inside `fit`
-   (sklearn handles this internally) — verify it survives
-   `backtesting`'s walk-forward re-fit-per-fold without leaking (it
-   shouldn't; `StackingRegressor.fit` does its own internal CV on the
-   training fold only).
-3. **Gate `modelsearch`'s ranking on out-of-sample stability, not just the
+1. **Gate `modelsearch`'s ranking on out-of-sample stability, not just the
    single trailing holdout.** Today `modelsearch` scores each candidate on
    one holdout split (documented, intentional v1 limitation — walk-forward
    is `backtesting`'s job). A safe middle ground: after ranking, re-score
    only the top-K candidates through a **short** `backtesting` walk-forward
    run (2-3 folds) before they're eligible for promotion, so a candidate
    that just got lucky on the single split doesn't get promoted blind.
-4. **Feature richness**: `research/providers/fundamentals.py` and
+2. **Feature richness**: `research/providers/fundamentals.py` and
    `social.py` are still stubs (CSV/manual load, fixture loader — see
    `gotchas.md`). Real fundamentals ingestion (e.g. a scheduled scrape of
    PSX financial statements, mirroring `psxdata`'s isolation pattern) would
    give every downstream model a genuinely new signal, not just a better
    fit to the same technical features. This is the highest-ceiling, highest
    -effort item on this list.
-5. **Regime-awareness**: none of the current estimators condition on
+3. **Regime-awareness**: none of the current estimators condition on
    volatility regime or sector. A `calendar`/`technical` feature already
    exists (`modeling/features.py`); consider a rolling-volatility feature
    and/or a per-sector `ResearchSnapshot` aggregate as new feature-spec
@@ -155,7 +170,8 @@ scalability gaps are architectural, not query-level:
 ## Suggested order for future sessions
 
 Highest ratio of value to risk, in order: (1) ~~UI KPI tiles~~ done
-2026-09-12, (2) async-ify one heavy action end-to-end as a template for the
-rest (`modelsearch` **Run search** is the best pilot — smallest blast
-radius), (3) stacking ensemble, (4) actually build/run Docker once, (5)
-everything else, gated on real usage data rather than speculation.
+2026-09-12, (2) ~~wire `voting_ensemble` into `modelsearch`~~ / ~~stacking
+ensemble~~ done 2026-09-13, (3) async-ify one heavy action end-to-end as a
+template for the rest (`modelsearch` **Run search** is still the best pilot
+— smallest blast radius), (4) actually build/run Docker once, (5) everything
+else, gated on real usage data rather than speculation.

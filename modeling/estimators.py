@@ -16,6 +16,7 @@ from sklearn.ensemble import (
     HistGradientBoostingRegressor,
     RandomForestClassifier,
     RandomForestRegressor,
+    StackingRegressor,
     VotingRegressor,
 )
 from sklearn.linear_model import (
@@ -78,42 +79,82 @@ def _depth(value) -> int | None:
     return None if not value else int(value)
 
 
-def _build_voting_ensemble(params: dict) -> VotingRegressor:
-    """Average several already-registered regressors into one estimator.
+def _resolve_ensemble_members(ensemble_key: str, estimators_param) -> list[tuple[str, object]]:
+    """Shared member-resolution for the meta-estimators below.
 
     Sub-estimator keys are resolved lazily (at ``.make()``/training time, not
     at module-import time) via the registry, so ordering in ``_SPECS`` below
     doesn't matter - every other spec is registered before any model is
     actually trained. Each sub-estimator gets its own ``StandardScaler`` iff
-    it needs one, since ``VotingRegressor`` has no single scaling policy that
+    it needs one, since a meta-estimator has no single scaling policy that
     would suit both a linear model and a tree ensemble at once.
     """
     # Local import: avoids a module-level cycle with registry.py at import time.
     from .registry import get_estimator
 
-    keys = [k.strip() for k in str(params["estimators"]).split(",") if k.strip()]
+    keys = [k.strip() for k in str(estimators_param).split(",") if k.strip()]
     seen = set()
     keys = [k for k in keys if not (k in seen or seen.add(k))]
     if len(keys) < 2:
         raise ValueError(
-            "voting_ensemble needs at least 2 distinct, comma-separated estimator keys "
-            f"(got {params['estimators']!r})"
+            f"{ensemble_key} needs at least 2 distinct, comma-separated estimator keys "
+            f"(got {estimators_param!r})"
         )
-    sub_estimators = []
+    members = []
     for key in keys:
-        if key == "voting_ensemble":
-            raise ValueError("voting_ensemble cannot include itself as a sub-estimator")
+        if key == ensemble_key:
+            raise ValueError(f"{ensemble_key} cannot include itself as a sub-estimator")
         spec = get_estimator(key)
         if spec.task != TASK_REGRESSION or spec.baseline:
             raise ValueError(
-                f"voting_ensemble: {key!r} is not a usable regression sub-estimator "
+                f"{ensemble_key}: {key!r} is not a usable regression sub-estimator "
                 "(must be a non-baseline regressor)"
             )
         estimator = spec.build()
         if spec.needs_scaling:
             estimator = make_pipeline(StandardScaler(), estimator)
-        sub_estimators.append((key, estimator))
-    return VotingRegressor(estimators=sub_estimators)
+        members.append((key, estimator))
+    return members
+
+
+def _build_voting_ensemble(params: dict) -> VotingRegressor:
+    """Average several already-registered regressors into one estimator."""
+    members = _resolve_ensemble_members("voting_ensemble", params["estimators"])
+    return VotingRegressor(estimators=members)
+
+
+def _build_stacking_ensemble(params: dict) -> StackingRegressor:
+    """Stack several already-registered regressors behind a meta-learner.
+
+    Same registry-lazy member resolution as ``voting_ensemble``, plus a
+    ``final_estimator`` (also a registry key, default ``ridge``) trained on
+    the base models' out-of-fold predictions - ``StackingRegressor.fit`` runs
+    its own internal ``cv``-fold split on the training data it is given, so
+    this stays leak-free under ``backtesting``'s per-fold refit the same way
+    any other estimator does (fit only ever sees that fold's training rows).
+    """
+    from .registry import get_estimator
+
+    members = _resolve_ensemble_members("stacking_ensemble", params["estimators"])
+
+    final_key = params["final_estimator"]
+    if final_key == "stacking_ensemble":
+        raise ValueError("stacking_ensemble cannot use itself as the final_estimator")
+    final_spec = get_estimator(final_key)
+    if final_spec.task != TASK_REGRESSION or final_spec.baseline:
+        raise ValueError(
+            f"stacking_ensemble: final_estimator {final_key!r} is not a usable regression "
+            "estimator (must be a non-baseline regressor)"
+        )
+    final_estimator = final_spec.build()
+    if final_spec.needs_scaling:
+        final_estimator = make_pipeline(StandardScaler(), final_estimator)
+
+    cv = params["cv"]
+    if cv < 2:
+        raise ValueError(f"stacking_ensemble: cv must be at least 2 (got {cv})")
+
+    return StackingRegressor(estimators=members, final_estimator=final_estimator, cv=cv)
 
 
 # --------------------------------------------------------------------------
@@ -287,6 +328,19 @@ _SPECS: list[dict] = [
         multioutput=False,
         schema={"estimators": (str, "ridge,gradient_boosting,hist_gbr")},
         make=lambda p: _build_voting_ensemble(p),
+    ),
+    dict(
+        key="stacking_ensemble",
+        name="Stacking ensemble (meta-learner over several regressors)",
+        task=TASK_REGRESSION,
+        scale=False,
+        multioutput=False,
+        schema={
+            "estimators": (str, "ridge,gradient_boosting,hist_gbr"),
+            "final_estimator": (str, "ridge"),
+            "cv": (int, 5),
+        },
+        make=lambda p: _build_stacking_ensemble(p),
     ),
     # -- baselines ------------------------------------------------------
     dict(

@@ -146,6 +146,53 @@ def _score_candidate_walk_forward(
     return spaces.scalar_score(metrics, score_key), metrics, used
 
 
+def _auto_ensemble_candidates(
+    search, task: str, rows: list[ModelSearchResult]
+) -> list[tuple[str, dict]]:
+    """Build up to one extra ``voting_ensemble`` candidate averaging the top
+    ``search.auto_ensemble_top_k`` distinct base estimators scored so far.
+
+    Regression only (``voting_ensemble`` is a regression-only estimator);
+    baseline estimators (naive/drift/seasonal_naive) and an already-present
+    ``voting_ensemble`` result are excluded as sub-estimators, mirroring
+    ``modeling.estimators._build_voting_ensemble``'s own checks. Returns no
+    candidate when fewer than 2 distinct eligible keys scored, or when the
+    resulting params hash collides with a candidate already in ``rows``
+    (e.g. the operator already swept ``voting_ensemble`` with this same
+    membership).
+    """
+    if task != "regression" or search.auto_ensemble_top_k < 2:
+        return []
+
+    from modeling.registry import get_estimator
+
+    best_by_key: dict[str, float] = {}
+    for row in rows:
+        if row.status != ModelSearchResult.Status.OK or row.score is None:
+            continue
+        if not np.isfinite(row.score) or row.estimator_key == "voting_ensemble":
+            continue
+        try:
+            spec = get_estimator(row.estimator_key)
+        except KeyError:
+            continue
+        if spec.baseline:
+            continue
+        if row.estimator_key not in best_by_key or row.score > best_by_key[row.estimator_key]:
+            best_by_key[row.estimator_key] = row.score
+
+    ranked_keys = sorted(best_by_key, key=best_by_key.get, reverse=True)
+    keys = ranked_keys[: search.auto_ensemble_top_k]
+    if len(keys) < 2:
+        return []
+
+    params = {"estimators": ",".join(keys)}
+    digest = spaces.params_hash("voting_ensemble", params)
+    if any(r.params_hash == digest for r in rows):
+        return []
+    return [("voting_ensemble", params)]
+
+
 def run_search(search, *, created_by=None) -> ModelSearchRun:
     from modeling.dataset import build_dataset
     from modeling.metrics import classification_metrics, regression_metrics
@@ -195,9 +242,9 @@ def run_search(search, *, created_by=None) -> ModelSearchRun:
             avail = dataset.available_at
             anchor_all = dataset.anchor.to_numpy()
 
-        rows: list[ModelSearchResult] = []
-        scored: list[ModelSearchResult] = []
-        for key, params in candidates:
+        def _evaluate(key, params) -> ModelSearchResult:
+            """Fit + score one (key, params) candidate against the shared
+            dataset; never raises - a failure becomes a FAILED row."""
             digest = spaces.params_hash(key, params)
             try:
                 pipeline = build_pipeline(_Candidate(key, params), dataset)
@@ -249,7 +296,7 @@ def run_search(search, *, created_by=None) -> ModelSearchRun:
                         "holdout_score": holdout_score,
                     }
 
-                row = ModelSearchResult(
+                return ModelSearchResult(
                     search=search,
                     run=run,
                     estimator_key=key,
@@ -264,22 +311,34 @@ def run_search(search, *, created_by=None) -> ModelSearchRun:
                     model_size_bytes=size,
                     wf_folds=n_wf_folds,
                 )
-                rows.append(row)
-                if score is not None and np.isfinite(score):
-                    scored.append(row)
             except Exception as exc:  # noqa: BLE001 - recorded per candidate
                 logger.exception("model search candidate %s %s failed", key, params)
-                rows.append(
-                    ModelSearchResult(
-                        search=search,
-                        run=run,
-                        estimator_key=key,
-                        estimator_params=params,
-                        params_hash=digest,
-                        status=ModelSearchResult.Status.FAILED,
-                        error=f"{type(exc).__name__}: {exc}",
-                    )
+                return ModelSearchResult(
+                    search=search,
+                    run=run,
+                    estimator_key=key,
+                    estimator_params=params,
+                    params_hash=digest,
+                    status=ModelSearchResult.Status.FAILED,
+                    error=f"{type(exc).__name__}: {exc}",
                 )
+
+        rows: list[ModelSearchResult] = []
+        scored: list[ModelSearchResult] = []
+        for key, params in candidates:
+            row = _evaluate(key, params)
+            rows.append(row)
+            if row.status == ModelSearchResult.Status.OK and np.isfinite(row.score):
+                scored.append(row)
+
+        # Auto-ensemble: after the sweep, also try one voting_ensemble of the
+        # top-scoring distinct base estimators - a search over single models
+        # gets a "does averaging the winners help" candidate for free.
+        for key, params in _auto_ensemble_candidates(search, task, rows):
+            row = _evaluate(key, params)
+            rows.append(row)
+            if row.status == ModelSearchResult.Status.OK and np.isfinite(row.score):
+                scored.append(row)
 
         scored.sort(key=lambda r: r.score, reverse=True)
         for i, row in enumerate(scored, start=1):
@@ -296,7 +355,7 @@ def run_search(search, *, created_by=None) -> ModelSearchRun:
         ok = sum(1 for r in rows if r.status == ModelSearchResult.Status.OK)
         run.status = ModelSearchRun.Status.SUCCESS
         run.finished_at = timezone.now()
-        run.candidates_total = len(candidates)
+        run.candidates_total = len(rows)
         run.candidates_ok = ok
         run.candidates_failed = len(rows) - ok
         run.dataset_rows = int(len(dataset.X))

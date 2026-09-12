@@ -49,6 +49,7 @@ def _save(form, instance=None):
     obj.mode = data["mode"]
     obj.max_candidates = data["max_candidates"]
     obj.random_seed = data["random_seed"]
+    obj.auto_ensemble_top_k = data["auto_ensemble_top_k"]
     obj.scoring = data["scoring"] or ""
     obj.scoring_mode = data["scoring_mode"]
     obj.wf_scheme = data["wf_scheme"]
