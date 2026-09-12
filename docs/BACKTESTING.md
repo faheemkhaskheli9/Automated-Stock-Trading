@@ -26,8 +26,29 @@ CLI: `python manage.py backtest_model <backtest_id>
 [--fit-mode --training-run --scheme --train-span --test-span --step --gap
 --start --end]` (flags override the stored config for that run only;
 `--training-run <id>` pins a `ModelTrainingRun` artifact for `frozen_artifact`).
-Celery (unscheduled): `backtesting.tasks.run_backtest_task(backtest_id)`,
+Celery (unscheduled): `backtesting.tasks.run_backtest_task(backtest_id, run_id=None)`,
 `run_active_backtests()`.
+
+**Run backtest is async** (same pattern as `modelsearch`'s Run search, the
+scalability pilot): `services.start_backtest_run(backtest, created_by=None)`
+creates the `BacktestRun` row (`status=running`) immediately and enqueues
+`tasks.run_backtest_task.delay(backtest.pk, run.pk)` instead of walking every
+fold inline in the request. `engine.run_backtest()` and the task both accept
+an existing `run` so the pre-created row is scored into rather than a second
+one being made; the old create-a-run-and-score-inline shape
+(`services.run_backtest(backtest, created_by=None)`) stays the default for
+callers that don't pass one - the CLI command, `run_active_backtests`, and
+direct `engine.run_backtest()`/`services.run_backtest()` calls. With
+`CELERY_TASK_ALWAYS_EAGER` (the local/test default, see `settings/dev.py`)
+`.delay()` runs inline before returning, so local dev/tests need no worker.
+The `/backtests/<id>/` detail page shows the running row immediately,
+disables the **Run backtest** button, and auto-refreshes every few seconds
+until it finishes - same UI pattern as `/model-search/<id>/`. Same real
+deployment gap as `modelsearch`: `.delay()` needs a worker actually consuming
+the broker, which the managed-scheduler shape (one-off container tasks, no
+persistent Celery process) doesn't run by default - fine under
+docker-compose's `worker` service, a genuine gap otherwise until a small
+always-on worker is added there (see `docs/DEPLOYMENT.md`).
 
 ## Configuration (`Backtest`)
 

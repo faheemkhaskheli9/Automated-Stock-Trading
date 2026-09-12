@@ -10,7 +10,7 @@ from django.views.decorators.http import require_http_methods
 
 from .forms import BacktestConfigForm
 from .models import Backtest
-from .services import run_backtest
+from .services import start_backtest_run
 
 logger = logging.getLogger(__name__)
 
@@ -78,15 +78,19 @@ def detail(request, pk):
         Backtest.objects.select_related("model").prefetch_related("runs"), pk=pk
     )
     if request.method == "POST" and request.POST.get("action") == "run":
-        run = run_backtest(backtest, created_by=request.user)
+        run = start_backtest_run(backtest, created_by=request.user)
         if run.status == run.Status.SUCCESS:
             note = f"Ran {run.n_folds} folds, {run.n_predictions} predictions."
             if run.looks_leaky:
                 messages.warning(request, note + " Result looks leaky - investigate.")
             else:
                 messages.success(request, note)
-        else:
+        elif run.status == run.Status.FAILED:
             messages.error(request, f"Backtest failed: {run.error}")
+        else:
+            messages.info(
+                request, "Backtest started - this page refreshes automatically until it's done."
+            )
         return redirect("backtesting:detail", pk=backtest.pk)
 
     latest = backtest.runs.first()

@@ -86,6 +86,22 @@ GitHub Projects board #5 alongside Phase 7/8/9 work (per project convention).
   a real gap otherwise. Tested (`modelsearch/tests/test_tasks.py`, existing
   `test_views.py` flow now exercises the async path); documented in
   `docs/MODEL_SEARCH.md`, `docs/DEPLOYMENT.md`, `CLAUDE.md`.
+- **Async-ify `backtesting`'s "Run backtest"** (Scalability item #1 continued
+  — generalizing the `modelsearch` pilot to the next heavy action):
+  `services.start_backtest_run` creates the `BacktestRun` row
+  (`status="running"`) immediately and enqueues
+  `tasks.run_backtest_task.delay(backtest_id, run_id)` instead of walking
+  every fold inline in the request; `engine.run_backtest()`/the task now
+  accept an existing `run` so the pre-created row is scored into rather than
+  a second one being made — same shape as `modelsearch`, no schema change
+  (`BacktestRun` already had the running/success/failed lifecycle).
+  `/backtests/<id>/`'s detail page shows the running row immediately,
+  disables the button, and auto-refreshes the same way. Same deployment
+  caveat as the pilot (needs an actually-running worker; fine under
+  docker-compose, a gap under the managed-scheduler shape). Tested
+  (`backtesting/tests/test_tasks.py`, existing `test_views.py` flow now
+  exercises the async path); documented in `docs/BACKTESTING.md`,
+  `docs/DEPLOYMENT.md`, `CLAUDE.md`.
 
 ## Models — next candidates (ranked)
 
@@ -145,18 +161,19 @@ no per-row query) — commit `347773a` already did a pass here. The real
 scalability gaps are architectural, not query-level:
 
 1. ~~**Move `modelsearch`'s Run search off the request thread**~~ — done
-   2026-09-13 as the pilot, see above. Several other operator actions are
-   still fully synchronous by design (`research:sync`, `execution:run_cycle`,
-   `backtesting`'s walk-forward runner, `signalfeed:run`) — fine at today's
-   data volume, but a multi-year backtest or a big research sync will
-   eventually exceed a request timeout as instrument/history count grows.
-   The pattern from `modelsearch` generalizes directly: view calls a new
-   `start_*_run`-style service that creates the `*Run` row (`status=running`)
-   and `.delay()`s the existing Celery task with that row's id, the task
-   accepts an optional pre-created run instead of always making one, and the
-   detail template polls the same way (inline `<script>` + disabled button
-   while running). The `ModelTrainingRun`/`BacktestRun` models already have
-   the pending/running/done/error lifecycle needed — no schema change.
+   2026-09-13 as the pilot; ~~**generalize to `backtesting`'s Run
+   backtest**~~ — also done 2026-09-13, see above. Several other operator
+   actions are still fully synchronous by design (`research:sync`,
+   `execution:run_cycle`, `signalfeed:run`) — fine at today's data volume,
+   but a big research sync will eventually exceed a request timeout as
+   instrument/history count grows. The pattern generalizes the same way:
+   view calls a new `start_*_run`-style service that creates the `*Run` row
+   (`status=running`) and `.delay()`s the existing Celery task with that
+   row's id, the task accepts an optional pre-created run instead of always
+   making one, and the detail template polls the same way (inline `<script>`
+   + disabled button while running) — needs a `*Run`-style model with a
+   running/done/error lifecycle first, which `research`/`execution` don't
+   have yet (`ResearchSnapshot`/`Order` aren't run-lifecycle rows).
    Remember the deployment caveat that came with the pilot: this needs an
    actually-running worker, which the plan's preferred managed-scheduler
    shape doesn't provide by default (see `docs/DEPLOYMENT.md`).
@@ -191,9 +208,7 @@ scalability gaps are architectural, not query-level:
 
 Highest ratio of value to risk, in order: (1) ~~UI KPI tiles~~ done
 2026-09-12, (2) ~~wire `voting_ensemble` into `modelsearch`~~ / ~~stacking
-ensemble~~ / ~~async-ify `modelsearch`'s Run search~~ done 2026-09-13, (3)
-generalize the async pattern to the next heavy action (`backtesting`'s
-walk-forward runner is the next-best candidate — same `*Run` lifecycle
-shape already exists), (4) actually build/run Docker once (also resolves
-the async-worker deployment caveat above), (5) everything else, gated on
-real usage data rather than speculation.
+ensemble~~ / ~~async-ify `modelsearch`'s Run search~~ / ~~async-ify
+`backtesting`'s Run backtest~~ done 2026-09-13, (3) actually build/run Docker
+once (also resolves the async-worker deployment caveat above), (4) everything
+else, gated on real usage data rather than speculation.

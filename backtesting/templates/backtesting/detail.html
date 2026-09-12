@@ -7,11 +7,15 @@
     <div>
       <a class="secondary" href="{% url 'backtesting:edit' backtest.pk %}">Edit</a>
       {% if latest %}<a class="secondary" href="?export=csv">Predictions CSV</a>{% endif %}
-      <form method="post" class="inline-form"><input type="hidden" name="action" value="run">{% csrf_token %}<button class="primary" type="submit">Run backtest</button></form>
+      <form method="post" class="inline-form"><input type="hidden" name="action" value="run">{% csrf_token %}<button class="primary" type="submit"{% if latest.status == "running" %} disabled{% endif %}>Run backtest</button></form>
     </div>
   </div>
   {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
   {% if latest and latest.status == 'failed' %}<div class="notice error">Last run failed: {{ latest.error }}</div>{% endif %}
+  {% if latest.status == "running" %}
+  <div class="notice">Backtest running - this page refreshes every few seconds until it's done.</div>
+  <script>setTimeout(function () { location.reload(); }, 4000);</script>
+  {% endif %}
 
   <div class="panel controls">
     <h2>Configuration</h2>

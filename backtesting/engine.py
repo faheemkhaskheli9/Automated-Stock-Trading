@@ -76,8 +76,17 @@ def _final_step(values) -> np.ndarray:
     return arr[:, -1] if arr.ndim == 2 else arr.ravel()
 
 
-def run_backtest(backtest, *, created_by=None) -> BacktestRun:
-    run = BacktestRun.objects.create(backtest=backtest, created_by=created_by)
+def run_backtest(backtest, *, created_by=None, run: BacktestRun | None = None) -> BacktestRun:
+    """Run every fold of ``backtest`` and persist the results.
+
+    ``run`` lets a caller that already created the ``BacktestRun`` row (e.g.
+    ``services.start_backtest_run``, so a "run started" response can return
+    before any fitting happens) hand it in instead of a fresh one being
+    created here - the synchronous CLI/test call sites that pass neither
+    ``run`` nor care about the distinction keep working unchanged.
+    """
+    if run is None:
+        run = BacktestRun.objects.create(backtest=backtest, created_by=created_by)
     try:
         _execute(backtest, run)
     except Exception as exc:  # noqa: BLE001 - recorded on the run, never propagated

@@ -13,15 +13,31 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task
-def run_backtest_task(backtest_id: int) -> int | None:
-    from .models import Backtest
-    from .services import run_backtest
+def run_backtest_task(backtest_id: int, run_id: int | None = None) -> int | None:
+    """Run every fold of ``Backtest(pk=backtest_id)``.
+
+    ``run_id`` - when given (the async UI path via
+    ``services.start_backtest_run``) - names a ``BacktestRun`` row already
+    created by the caller; this task scores into that row instead of
+    creating a new one. Omitted (the old synchronous CLI/task-only call
+    shape), a new run is created here, same as before.
+    """
+    from .engine import run_backtest
+    from .models import Backtest, BacktestRun
 
     backtest = Backtest.objects.filter(pk=backtest_id).first()
     if backtest is None:
         logger.warning("run_backtest_task: no Backtest %s", backtest_id)
         return None
-    return run_backtest(backtest).pk
+
+    run = None
+    if run_id is not None:
+        run = BacktestRun.objects.filter(pk=run_id, backtest=backtest).first()
+        if run is None:
+            logger.warning(
+                "run_backtest_task: no BacktestRun %s for backtest %s", run_id, backtest_id
+            )
+    return run_backtest(backtest, run=run).pk
 
 
 @shared_task
