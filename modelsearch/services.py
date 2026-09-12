@@ -8,9 +8,31 @@ from __future__ import annotations
 
 
 def run_search(search, *, created_by=None):
+    """Run a search synchronously in the caller's process - the CLI command
+    and tests use this. UI actions should use ``start_search_run`` instead
+    so the request thread isn't blocked by a slow sweep."""
     from .search import run_search as _run
 
     return _run(search, created_by=created_by)
+
+
+def start_search_run(search, *, created_by=None):
+    """Create the ``ModelSearchRun`` row immediately (cheap - no fitting yet)
+    and hand the actual sweep to Celery.
+
+    With ``CELERY_TASK_ALWAYS_EAGER`` (the local/test default - see
+    ``settings/dev.py``) ``.delay()`` runs the task inline before returning,
+    so the refreshed row already reflects the finished run; against a real
+    worker it comes back ``running`` and the caller (the ``/model-search/``
+    detail page) polls/refreshes to see it complete.
+    """
+    from .models import ModelSearchRun
+    from .tasks import run_model_search_task
+
+    run = ModelSearchRun.objects.create(search=search, created_by=created_by)
+    run_model_search_task.delay(search.pk, run.pk)
+    run.refresh_from_db()
+    return run
 
 
 def promote_result(result, *, name=None, activate=False):

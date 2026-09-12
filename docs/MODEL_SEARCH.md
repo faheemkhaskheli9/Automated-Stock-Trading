@@ -26,7 +26,38 @@ Pages (all `login_required`, routed under `/model-search/`):
 |---|---|
 | `/model-search/` | List searches + last run status + best candidate |
 | `/model-search/new/` (`?from=<TradingModel id>`), `/model-search/<id>/edit/` | Configure a search |
-| `/model-search/<id>/` | Config, **Run search** (synchronous), ranked candidate table, accuracy-vs-fit-time scatter, **Promote**, run history |
+| `/model-search/<id>/` | Config, **Run search** (async - see below), ranked candidate table, accuracy-vs-fit-time scatter, **Promote**, run history |
+
+## Running a search (async)
+
+"Run search" no longer blocks the request: it creates the `ModelSearchRun`
+row (`status="running"`) immediately and hands the actual sweep to
+`modelsearch.tasks.run_model_search_task` via Celery
+(`services.start_search_run`). The detail page shows that row right away and
+auto-refreshes (a small inline `<script>`, same pattern as the shared nav's
+dropdown toggle - no HTMX/build step) every few seconds while it's
+`"running"`; the **Run search** button is disabled meanwhile so a second
+click can't start a duplicate run.
+
+Locally, `CELERY_TASK_ALWAYS_EAGER=True` (the `dev.py` default - no worker or
+broker needed) makes `.delay()` run the task inline, so in practice a local
+"Run search" click still finishes before the redirect - the async path is
+exercised the same way it will be in production, just without an actual
+queueing delay. Set `CELERY_TASK_ALWAYS_EAGER=False` (`.env`) to test the
+polling path against a real Celery worker + broker.
+
+The CLI (`run_model_search` management command) and
+`modelsearch.services.run_search()` still run fully synchronously in the
+calling process - unchanged, since a one-off script/cron invocation has no
+request thread to free up.
+
+**Deployment caveat**: `.delay()` needs a worker actually consuming the
+broker. The Docker Compose deployment shape runs one (`docker-compose.yml`'s
+`worker` service) so this just works; the managed-scheduler shape
+(`docs/DEPLOYMENT.md`'s preferred shape, one-off container tasks with no
+persistent Celery process) does **not** run one by default - deploying that
+shape without also running a small always-on worker leaves a search stuck
+`"running"` forever.
 
 ## Search space
 

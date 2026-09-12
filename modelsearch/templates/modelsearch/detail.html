@@ -5,10 +5,14 @@
     <div><p class="eyebrow">MODEL SEARCH</p><h1>{{ search.name }}</h1><p class="muted">{{ search.task }} &middot; target: {{ search.target_spec.type }} &middot; ranking by <strong>{{ score_key }}</strong> ({{ search.get_scoring_mode_display }}) &middot; {{ search.get_mode_display }}</p></div>
     <div>
       <a class="secondary" href="{% url 'modelsearch:edit' search.pk %}">Edit</a>
-      <form method="post" class="inline-form"><input type="hidden" name="action" value="run">{% csrf_token %}<button class="primary" type="submit">Run search</button></form>
+      <form method="post" class="inline-form"><input type="hidden" name="action" value="run">{% csrf_token %}<button class="primary" type="submit"{% if latest_run.status == "running" %} disabled{% endif %}>Run search</button></form>
     </div>
   </div>
   {% if messages %}{% for m in messages %}<div class="notice {{ m.tags }}">{{ m }}</div>{% endfor %}{% endif %}
+  {% if latest_run.status == "running" %}
+  <div class="notice">Search running - this page refreshes every few seconds until it's done.</div>
+  <script>setTimeout(function () { location.reload(); }, 4000);</script>
+  {% endif %}
 
   <div class="panel controls">
     <h2>Configuration</h2>

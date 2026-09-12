@@ -129,15 +129,20 @@ def detail(request, pk):
     if request.method == "POST":
         action = request.POST.get("action")
         if action == "run":
-            run = services.run_search(search, created_by=request.user)
+            run = services.start_search_run(search, created_by=request.user)
             if run.status == run.Status.SUCCESS:
                 messages.success(
                     request,
                     f"Search complete: {run.candidates_ok}/{run.candidates_total} candidates "
                     f"scored on {run.dataset_rows} rows.",
                 )
-            else:
+            elif run.status == run.Status.FAILED:
                 messages.error(request, f"Search failed: {run.error}")
+            else:
+                messages.info(
+                    request,
+                    "Search started - this page refreshes automatically until it's done.",
+                )
             return redirect("modelsearch:detail", pk=pk)
 
         if action == "promote":

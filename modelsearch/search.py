@@ -193,12 +193,21 @@ def _auto_ensemble_candidates(
     return [("voting_ensemble", params)]
 
 
-def run_search(search, *, created_by=None) -> ModelSearchRun:
+def run_search(search, *, created_by=None, run: ModelSearchRun | None = None) -> ModelSearchRun:
+    """Evaluate every candidate in ``search`` and persist the ranked results.
+
+    ``run`` lets a caller that already created the ``ModelSearchRun`` row
+    (e.g. ``services.start_search_run``, so a "search started" response can
+    return before any fitting happens) hand it in instead of a fresh one
+    being created here - the synchronous CLI/test call sites that pass
+    neither ``run`` nor care about the distinction keep working unchanged.
+    """
     from modeling.dataset import build_dataset
     from modeling.metrics import classification_metrics, regression_metrics
     from modeling.training import build_pipeline
 
-    run = ModelSearchRun.objects.create(search=search, created_by=created_by)
+    if run is None:
+        run = ModelSearchRun.objects.create(search=search, created_by=created_by)
     try:
         candidates = spaces.expand(
             search.search_space,

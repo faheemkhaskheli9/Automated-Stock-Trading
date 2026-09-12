@@ -68,6 +68,24 @@ GitHub Projects board #5 alongside Phase 7/8/9 work (per project convention).
   `feature_importances_`, same path as `voting_ensemble`/`mlp`). Tested
   (`modeling/tests/test_estimators.py`), documented in `docs/MODELING.md`
   and `CLAUDE.md`. This was Models backlog item #2 (stacking ensemble).
+- **Async-ify `modelsearch`'s "Run search"** (Scalability item #1, the
+  pilot): `services.start_search_run` creates the `ModelSearchRun` row
+  (`status="running"`) immediately and enqueues
+  `tasks.run_model_search_task.delay(search_id, run_id)` instead of scoring
+  inline in the request; `run_search()`/the task now accept an existing
+  `run` so the pre-created row is scored into rather than a second one being
+  made. Added `CELERY_TASK_ALWAYS_EAGER` (`settings/base.py`, default
+  `False`; `settings/dev.py` defaults it `True`) so local dev/tests need no
+  worker/broker - `.delay()` just runs inline. `/model-search/<id>/`'s
+  detail page shows the `running` row immediately, disables the button, and
+  auto-refreshes via a small inline `<script>` (same pattern as the shared
+  nav dropdown toggle) until the run finishes. **Deployment caveat
+  documented, not yet resolved**: this needs a worker actually consuming
+  the broker, which the plan's preferred managed-scheduler shape doesn't
+  run persistently (see `docs/DEPLOYMENT.md`) - fine under docker-compose,
+  a real gap otherwise. Tested (`modelsearch/tests/test_tasks.py`, existing
+  `test_views.py` flow now exercises the async path); documented in
+  `docs/MODEL_SEARCH.md`, `docs/DEPLOYMENT.md`, `CLAUDE.md`.
 
 ## Models — next candidates (ranked)
 
@@ -126,20 +144,22 @@ is already correctly batched (`instrument_id__in=ids` + `select_related`,
 no per-row query) — commit `347773a` already did a pass here. The real
 scalability gaps are architectural, not query-level:
 
-1. **Move synchronous heavy actions off the request thread.** Several
-   operator actions run fully synchronously inside a view today by design
-   (`research:sync`, `execution:run_cycle`, `modelsearch`'s **Run search**,
+1. ~~**Move `modelsearch`'s Run search off the request thread**~~ — done
+   2026-09-13 as the pilot, see above. Several other operator actions are
+   still fully synchronous by design (`research:sync`, `execution:run_cycle`,
    `backtesting`'s walk-forward runner, `signalfeed:run`) — fine at today's
-   data volume, but a walk-forward search or a multi-year backtest will
+   data volume, but a multi-year backtest or a big research sync will
    eventually exceed a request timeout as instrument/history count grows.
-   Celery infrastructure already exists (`tasks.py` per app) but isn't
-   wired to these UI actions. Proposed shape: view enqueues the existing
-   Celery task, writes a `*Run` row with `status=pending` immediately (the
-   `ModelTrainingRun`/`BacktestRun`/`ModelSearchRun` models already have a
-   pending/running/done/error lifecycle — this is *not* a new schema), and
-   the existing detail page polls/refreshes to show progress instead of
-   blocking the HTTP request. This is the single highest-leverage
-   scalability change available without touching data modeling at all.
+   The pattern from `modelsearch` generalizes directly: view calls a new
+   `start_*_run`-style service that creates the `*Run` row (`status=running`)
+   and `.delay()`s the existing Celery task with that row's id, the task
+   accepts an optional pre-created run instead of always making one, and the
+   detail template polls the same way (inline `<script>` + disabled button
+   while running). The `ModelTrainingRun`/`BacktestRun` models already have
+   the pending/running/done/error lifecycle needed — no schema change.
+   Remember the deployment caveat that came with the pilot: this needs an
+   actually-running worker, which the plan's preferred managed-scheduler
+   shape doesn't provide by default (see `docs/DEPLOYMENT.md`).
 2. **DB**: dev defaults to sqlite; `docker-compose.yml` provisions Postgres
    but per `gotchas.md` was never actually run. Before relying on
    Postgres-specific behavior (concurrent writes, `JSONField` query
@@ -171,7 +191,9 @@ scalability gaps are architectural, not query-level:
 
 Highest ratio of value to risk, in order: (1) ~~UI KPI tiles~~ done
 2026-09-12, (2) ~~wire `voting_ensemble` into `modelsearch`~~ / ~~stacking
-ensemble~~ done 2026-09-13, (3) async-ify one heavy action end-to-end as a
-template for the rest (`modelsearch` **Run search** is still the best pilot
-— smallest blast radius), (4) actually build/run Docker once, (5) everything
-else, gated on real usage data rather than speculation.
+ensemble~~ / ~~async-ify `modelsearch`'s Run search~~ done 2026-09-13, (3)
+generalize the async pattern to the next heavy action (`backtesting`'s
+walk-forward runner is the next-best candidate — same `*Run` lifecycle
+shape already exists), (4) actually build/run Docker once (also resolves
+the async-worker deployment caveat above), (5) everything else, gated on
+real usage data rather than speculation.

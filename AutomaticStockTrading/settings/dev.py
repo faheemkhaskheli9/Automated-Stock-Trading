@@ -10,3 +10,9 @@ ALLOWED_HOSTS = list(set(env.list("ALLOWED_HOSTS", default=[]) + ["localhost", "
 
 # Print alert emails to the console instead of sending anything real.
 EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+
+# Local dev/tests rarely have a Celery worker + broker running alongside
+# `runserver`/`pytest` - run enqueued tasks inline by default so UI actions
+# that hand work to Celery (e.g. modelsearch's async "Run search") still
+# work out of the box. Override via env to test against a real worker.
+CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=True)

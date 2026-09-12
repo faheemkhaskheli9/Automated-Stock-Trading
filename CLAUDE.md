@@ -408,20 +408,29 @@ Routed at `/model-search/`. Adds no dependencies (reuses `modeling`).
   (default 3, 0/1 disables) distinct-key OK results - regression only,
   excludes baselines and an already-swept identical `voting_ensemble`
   (params-hash dedup) - competes for rank/Pareto like any other candidate.
-- `services.py` (deferred imports): `run_search`, `promote_result(result)` ->
-  a new `modeling.TradingModel` (estimator+params from the result, specs from
-  the search); `full_clean`'d, **not** auto-trained.
+- `services.py` (deferred imports): `run_search` (synchronous, in-process -
+  CLI/tests), `start_search_run(search, created_by=None)` (the async UI
+  path: creates the `ModelSearchRun` row `running` immediately, then
+  `run_model_search_task.delay(search.pk, run.pk)`; `CELERY_TASK_ALWAYS_EAGER`
+  - `dev.py` defaults it `True` - runs that inline so local dev/tests need no
+  worker/broker), `promote_result(result)` -> a new `modeling.TradingModel`
+  (estimator+params from the result, specs from the search); `full_clean`'d,
+  **not** auto-trained.
 - `models.py`: `ModelSearch`, `ModelSearchRun` (execution row),
   `ModelSearchResult` (per candidate: params, score, full metrics blob,
   `fit_seconds`/`predict_seconds`/`predict_latency_ms`/`model_size_bytes`,
   `rank`, `is_pareto`, `status` ok/failed; `unique(run, params_hash)`).
-- `management/commands/run_model_search.py` (`<search_id> [--seed] [--max]`),
-  `tasks.py::run_model_search_task` (unscheduled).
+- `management/commands/run_model_search.py` (`<search_id> [--seed] [--max]`,
+  synchronous), `tasks.py::run_model_search_task(search_id, run_id=None)` -
+  `run_id` given (the async UI path) scores into that existing row; omitted,
+  creates one itself (old shape, still used standalone/unscheduled).
 - UI (FBVs under `/model-search/`, extend `marketdata/base.html`, linked from
   the shared nav's **Models** group): `index`, `edit` ("Load from base model"
-  prefill / `?from=<pk>`), `detail` (config, **Run search** synchronous,
-  ranked candidate table + accuracy-vs-fit-time SVG scatter + **Promote** per
-  row). Single trailing holdout, **not** walk-forward.
+  prefill / `?from=<pk>`), `detail` (config, **Run search** - async, see
+  above; page polls via a small inline `<script>` while `latest_run.status
+  == "running"`, button disabled meanwhile - ranked candidate table +
+  accuracy-vs-fit-time SVG scatter + **Promote** per row). Single trailing
+  holdout, **not** walk-forward.
 
 Usage, search-space shape and limitations: `docs/MODEL_SEARCH.md`.
 
@@ -588,6 +597,16 @@ redis). Every recurring job is also a plain management command that runs the sam
 with no Celery broker/worker involved - meant to be invoked directly by a cloud managed
 scheduler (EventBridge/Cloud Scheduler) as a one-off container task, which is the plan's
 preferred shape over running a persistent Celery beat process.
+
+Caveat this creates for `modelsearch`'s async **Run search** (and any future UI action
+built the same way, per `docs/IMPROVEMENT_BACKLOG.md`'s scalability item): `.delay()`
+needs a **worker actually consuming the broker**, which the managed-scheduler shape
+above doesn't run persistently. Deploying that shape without also running a persistent
+worker container leaves an enqueued search stuck `"running"` forever. `docker-compose.yml`
+does run a `worker` service, so the Docker Compose shape (`prod.py`,
+`CELERY_TASK_ALWAYS_EAGER` unset -> `False`) is fine as-is; the managed-scheduler shape
+needs its own always-on worker (a small persistent container/service, separate from the
+one-off scheduled tasks) before relying on this UI action in that deployment.
 
 **Schedule wiring**: `AutomaticStockTrading/schedules.py` is the single source of truth -
 one `ScheduledJob` per recurring job (crontab in `Asia/Karachi`, task path, management

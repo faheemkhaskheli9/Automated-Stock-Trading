@@ -163,6 +163,14 @@ CELERY_RESULT_BACKEND = env("CELERY_RESULT_BACKEND", default=CELERY_BROKER_URL)
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_BEAT_SCHEDULER = "django_celery_beat.schedulers:DatabaseScheduler"
 CELERY_TASK_TRACK_STARTED = True
+# When True, `.delay()`/`.apply_async()` run the task inline instead of
+# handing it to a broker/worker - lets a UI action that enqueues a task (see
+# modelsearch's async "Run search") work with no Celery infrastructure
+# running at all. False in prod.py so those same actions are genuinely
+# asynchronous there; dev.py flips the default to True since a local
+# `runserver` rarely has a worker running alongside it.
+CELERY_TASK_ALWAYS_EAGER = env.bool("CELERY_TASK_ALWAYS_EAGER", default=False)
+CELERY_TASK_EAGER_PROPAGATES = env.bool("CELERY_TASK_EAGER_PROPAGATES", default=False)
 
 # Recurring jobs, defined once in AutomaticStockTrading/schedules.py (the
 # single source of truth for both the Celery-beat and managed-scheduler

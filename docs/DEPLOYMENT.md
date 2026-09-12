@@ -81,6 +81,16 @@ always-on process to operate. Option 1 remains available (and is what
 future work that genuinely needs a queue/worker (e.g. retrying a failed
 broker call asynchronously) rather than a scheduled one-shot.
 
+That "genuinely needs a queue/worker" case now exists: `modelsearch`'s
+**Run search** UI action (`services.start_search_run`) enqueues via
+`.delay()` so the operator's request isn't blocked on a slow sweep - see
+`docs/MODEL_SEARCH.md`. This needs a **worker actually running** to ever
+complete; it works under option 1 (docker-compose's `worker` service) but
+option 2 (no persistent worker) leaves a search stuck `"running"` unless a
+small always-on worker is added alongside the one-off scheduled tasks. Local
+dev/tests sidestep this entirely via `CELERY_TASK_ALWAYS_EAGER=True`
+(`settings/dev.py`), which runs `.delay()` calls inline.
+
 ## Phase 7 background jobs
 
 Phase 7 adds more work that wants to run on a schedule. Like the two jobs
