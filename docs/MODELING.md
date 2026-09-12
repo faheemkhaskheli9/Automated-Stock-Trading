@@ -47,6 +47,17 @@ see `/modeling/estimators/` for the live list and each one's params.
 - **Trees / ensembles** (`sklearn.ensemble`): `random_forest`(+`_clf`),
   `gradient_boosting`(+`_clf`), `hist_gbr`(+`_clf`).
 - **Neural net** (`sklearn.neural_network`, no torch): `mlp` / `mlp_clf`.
+- **`voting_ensemble`**: averages 2+ other *registered, non-baseline
+  regressors* named in its `estimators` param (comma-separated keys, e.g.
+  `"ridge,gradient_boosting,hist_gbr"`; default is that trio). Sub-estimator
+  keys are resolved from the registry at training time (not at import time),
+  so any regressor added later works as a sub-estimator with no code change
+  here. Each sub-estimator gets its own `StandardScaler` iff it needs one
+  (`sklearn.ensemble.VotingRegressor` has no single scaling policy that fits
+  both a linear model and a tree ensemble). Averaging several
+  differently-biased models is usually a cheap, low-risk accuracy win over
+  any one of them alone - it's the natural first thing to try from
+  `modelsearch` results instead of hand-picking a single winner.
 - **Baselines**: `naive_last`, `drift`, `seasonal_naive` - trivial
   references for the skill-vs-naive number. They read one input column and
   therefore need an `ohlc` source with the matching close lag in the

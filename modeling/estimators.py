@@ -16,6 +16,7 @@ from sklearn.ensemble import (
     HistGradientBoostingRegressor,
     RandomForestClassifier,
     RandomForestRegressor,
+    VotingRegressor,
 )
 from sklearn.linear_model import (
     ElasticNet,
@@ -25,6 +26,8 @@ from sklearn.linear_model import (
     Ridge,
 )
 from sklearn.neural_network import MLPClassifier, MLPRegressor
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
 
 from .estimators_base import TASK_CLASSIFICATION, TASK_REGRESSION, BaseEstimatorSpec
 from .registry import register_estimator
@@ -73,6 +76,44 @@ def _mlp_layers(spec: str) -> tuple[int, ...]:
 def _depth(value) -> int | None:
     """0 (the form default) means 'no limit'."""
     return None if not value else int(value)
+
+
+def _build_voting_ensemble(params: dict) -> VotingRegressor:
+    """Average several already-registered regressors into one estimator.
+
+    Sub-estimator keys are resolved lazily (at ``.make()``/training time, not
+    at module-import time) via the registry, so ordering in ``_SPECS`` below
+    doesn't matter - every other spec is registered before any model is
+    actually trained. Each sub-estimator gets its own ``StandardScaler`` iff
+    it needs one, since ``VotingRegressor`` has no single scaling policy that
+    would suit both a linear model and a tree ensemble at once.
+    """
+    # Local import: avoids a module-level cycle with registry.py at import time.
+    from .registry import get_estimator
+
+    keys = [k.strip() for k in str(params["estimators"]).split(",") if k.strip()]
+    seen = set()
+    keys = [k for k in keys if not (k in seen or seen.add(k))]
+    if len(keys) < 2:
+        raise ValueError(
+            "voting_ensemble needs at least 2 distinct, comma-separated estimator keys "
+            f"(got {params['estimators']!r})"
+        )
+    sub_estimators = []
+    for key in keys:
+        if key == "voting_ensemble":
+            raise ValueError("voting_ensemble cannot include itself as a sub-estimator")
+        spec = get_estimator(key)
+        if spec.task != TASK_REGRESSION or spec.baseline:
+            raise ValueError(
+                f"voting_ensemble: {key!r} is not a usable regression sub-estimator "
+                "(must be a non-baseline regressor)"
+            )
+        estimator = spec.build()
+        if spec.needs_scaling:
+            estimator = make_pipeline(StandardScaler(), estimator)
+        sub_estimators.append((key, estimator))
+    return VotingRegressor(estimators=sub_estimators)
 
 
 # --------------------------------------------------------------------------
@@ -236,6 +277,16 @@ _SPECS: list[dict] = [
             max_iter=p["max_iter"],
             random_state=0,
         ),
+    ),
+    # -- ensembles-of-estimators ------------------------------------------
+    dict(
+        key="voting_ensemble",
+        name="Voting ensemble (average of several regressors)",
+        task=TASK_REGRESSION,
+        scale=False,
+        multioutput=False,
+        schema={"estimators": (str, "ridge,gradient_boosting,hist_gbr")},
+        make=lambda p: _build_voting_ensemble(p),
     ),
     # -- baselines ------------------------------------------------------
     dict(
